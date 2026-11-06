@@ -1,0 +1,1556 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ISO Pipe Designer</title>
+<style>
+:root{--paper:#f5f2e8;--panel:#fbfaf6;--ink:#1c2530;--line:#d8d0bb;--muted:#6d6a60;--accent:#a8432a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",Tahoma,Arial,sans-serif;font-size:14px}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+header label{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:4px}
+select,input,button{font:inherit;padding:6px 8px;border:1px solid #bdb49c;border-radius:6px;background:#fff;color:var(--ink)}
+input[type=number]{width:90px}
+#sym{min-width:230px}
+button{cursor:pointer;touch-action:manipulation}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.copy{margin-inline-start:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+body{display:flex;flex-direction:column}
+header{flex:none}
+.body{display:flex;flex:1;min-height:0}
+aside{width:120px;flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+aside svg{width:110px;height:190px}
+#area{flex:1;position:relative;min-width:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+#list{position:absolute;left:10px;bottom:10px;max-height:45%;width:320px;overflow:auto;background:#fffffff2;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;pointer-events:none}
+#list div{padding:3px 0;border-bottom:1px dashed var(--line)}
+#list .tot{font-weight:600;border:0}
+#list .anc{color:var(--accent);font-weight:600}
+@media (max-width:700px){
+  header{flex-wrap:wrap;gap:4px;padding:4px 6px}
+  header label{font-size:10px;gap:2px}
+  select,input,button{padding:2px 4px;font-size:10px;border-radius:4px;flex:none}
+  #sym{min-width:120px;max-width:150px}
+  input[type=number]{width:52px}
+  .copy{margin-inline-start:0;width:100%;font-size:9px;text-align:center}
+  aside{width:72px}
+  aside svg{width:66px;height:114px}
+  #list{left:6px;right:6px;bottom:6px;width:auto;max-height:34%;font-size:12px}
+}
+#bom{position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:9}
+#bom[hidden]{display:none}
+#bom .sheet{background:#fff;color:#000;width:min(980px,96vw);max-height:92vh;overflow:auto;padding:16px;border-radius:8px;font-family:"IBM Plex Sans",Tahoma,Arial,sans-serif}
+#bom h3{margin:12px 0 4px}
+#bom img{width:100%;border:1px solid #ccc;background:#fff}
+#bom table{width:100%;border-collapse:collapse;font-size:12px}
+#bom th,#bom td{border:1px solid #999;padding:4px 6px;text-align:left}
+#bom th{background:#eee}
+#bom .bar{display:flex;gap:6px;justify-content:flex-end;margin-bottom:8px}
+@media print{
+  body *{visibility:hidden}
+  #bom,#bom *{visibility:visible}
+  #bom{position:absolute;left:0;top:0;background:#fff;display:block}
+  #bom .sheet{max-height:none;overflow:visible;width:100%;padding:0}
+  #bom .bar{display:none}
+}
+#prnArea{display:none}
+@media print{
+  @page{size:A4 landscape;margin:6mm}
+  body{background:#fff;overflow:visible;display:block}
+  body>*:not(#prnArea){display:none!important}
+  #prnArea{display:block!important}
+  #prnArea img{width:100%;height:auto;display:block}
+}
+</style>
+</head>
+<body>
+<header>
+  <label>Title <input id="ttl" type="text" placeholder="Drawing no." maxlength="80" style="width:130px"></label>
+  <label>Text <input id="lbl" type="text" placeholder="Text on drawing (optional)" maxlength="60" style="width:150px"></label>
+  <label>Symbol <select id="sym"></select></label>
+  <label>Joint <select id="jt">
+    <option value="BW">Buttweld</option>
+    <option value="SW">Socketweld</option>
+    <option value="TH">Threaded</option>
+    <option value="FL">Flanged</option>
+  </select></label>
+  <label>Length (mm) <input id="len" type="number" value="1000" min="0"></label>
+  <label>Direction <select id="dir">
+    <option value="N">North</option>
+    <option value="S">South</option>
+    <option value="E">East</option>
+    <option value="W">West</option>
+    <option value="U">Up</option>
+    <option value="D">Down</option>
+  </select></label>
+  <label>Angle° <input id="ang" type="number" value="0" min="0" max="180" step="5" style="width:64px"></label>
+  <button id="advb" type="button">More options</button>
+  <label class="adv" style="display:none">Bend <select id="side">
+    <option value="U">Up</option>
+    <option value="D">Down</option>
+    <option value="L">Left</option>
+    <option value="R">Right</option>
+  </select></label>
+  <label>Size <input id="size" type="text" placeholder="2 x 1" style="width:80px"></label>
+  <label>Sch/Class <input id="sch" type="text" placeholder="SCH40" style="width:84px"></label>
+  <button class="primary" id="add">Add</button>
+  <button id="cb" disabled>Cancel branch</button>
+  <button id="undo" style="display:none">Undo</button><button id="histBack" title="Back">&#9664;</button><button id="histFwd" title="Forward">&#9654;</button>
+  <button id="clr">Clear all</button>
+  <button style="display:none" id="zin">Zoom +</button>
+  <button style="display:none" id="zout">Zoom −</button>
+  <button id="center">Recenter</button>
+  <button id="fitb">Fit all</button>
+  <button style="display:none" id="flipb">Mirror next: Off</button>
+  <button id="flipl">Mirror last</button>
+      <button id="pairb">Facing flange</button>
+  <button id="fwb">Field mark: Off</button>
+  <button id="startb">Pick start point</button>
+  <button id="triB">Triangle</button>
+  <label class="adv" style="display:none">Facing <select id="face">
+    <option value="">Auto</option>
+    <option value="N">North</option>
+    <option value="E">East</option>
+    <option value="S">South</option>
+    <option value="W">West</option>
+    <option value="U">Up</option>
+    <option value="D">Down</option>
+  </select></label>
+  <button id="png">Save PNG</button>
+  <button id="pdfd">Save PDF</button>
+  <button style="display:none" id="prn">Print</button>
+  <button id="bomb">BOM</button>
+  <span class="copy">© 2026 BENMANSOUR SAMI. All rights reserved.</span>
+</header>
+<div class="body">
+  <aside>
+    <svg viewBox="0 0 110 190" aria-label="Direction compass">
+      <g stroke="#1c2530" stroke-width="2" fill="none">
+        <line x1="55" y1="95" x2="89.6" y2="75"/>
+        <line x1="55" y1="95" x2="20.4" y2="115"/>
+        <line x1="55" y1="95" x2="20.4" y2="75"/>
+        <line x1="55" y1="95" x2="89.6" y2="115"/>
+        <line x1="55" y1="95" x2="55" y2="55"/>
+        <line x1="55" y1="95" x2="55" y2="135"/>
+      </g>
+      <circle cx="55" cy="95" r="3" fill="#a8432a"/>
+      <g font-size="9" text-anchor="middle" fill="#1c2530" font-family="IBM Plex Sans,Tahoma,Arial,sans-serif">
+        <text x="92" y="66">North</text>
+        <text x="18" y="66">East</text>
+        <text x="22" y="130">South</text>
+        <text x="88" y="130">West</text>
+        <text x="55" y="44">Up</text>
+        <text x="55" y="152">Down</text>
+      </g>
+    </svg>
+  </aside>
+  <div id="area">
+    <canvas id="cv"></canvas>
+    <div id="list"></div>
+  </div>
+</div>
+<div id="prnArea"></div>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+const $ = i => document.getElementById(i);
+const cv = $('cv');
+let ctx = cv.getContext('2d');
+const SCALE = 0.08, G = 22, ACC = '#a8432a';
+const DIR = {N:[.866,-.5], S:[-.866,.5], E:[-.866,-.5], W:[.866,.5], U:[0,-1], D:[0,1]};
+const DN = {N:'North', S:'South', E:'East', W:'West', U:'Up', D:'Down'};
+// Symbol cross-direction: the other isometric horizontal axis (never a screen-perpendicular)
+const PERP = {N:[.866,.5], S:[.866,.5], E:[.866,-.5], W:[.866,-.5], U:[.866,-.5], D:[.866,-.5]};
+// 3D unit vectors [N, E, Up] and how each one projects onto the isometric screen
+const BASE = {N:[1,0,0], S:[-1,0,0], E:[0,1,0], W:[0,-1,0], U:[0,0,1], D:[0,0,-1]};
+const SCR_N = [.866,-.5], SCR_E = [-.866,-.5], SCR_U = [0,-1];
+function scr(c) {
+  return [c[0]*SCR_N[0] + c[1]*SCR_E[0] + c[2]*SCR_U[0], c[0]*SCR_N[1] + c[1]*SCR_E[1] + c[2]*SCR_U[1]];
+}
+function vecOf(it) { return it.c || BASE[it.d]; }
+function scrOf(it) { return scr(vecOf(it)); }
+// Rotate the source piece's direction by deg toward Up, Down, Left or Right
+function bendSide(src, side) {
+  const p = vecOf(src), n = Math.hypot(p[0], p[1], p[2]), u = p.map(v => v / n);
+  if (side === 'U') return [0, 0, 1];
+  if (side === 'D') return [0, 0, -1];
+  let perp = Math.abs(u[2]) < 1e-6 ? [-u[1], u[0], 0] : [1, 0, 0];
+  const pl = Math.hypot(perp[0], perp[1], perp[2]);
+  perp = perp.map(v => v / pl);
+  return side === 'L' ? perp : perp.map(v => -v);
+}
+function bendVec(src, deg, side) {
+  const p = vecOf(src), n = Math.hypot(p[0], p[1], p[2]), u = p.map(v => v / n);
+  let s;
+  if (side === 'U') s = [0, 0, 1];
+  else if (side === 'D') s = [0, 0, -1];
+  else {
+    let perp = Math.abs(u[2]) < 1e-6 ? [-u[1], u[0], 0] : [1, 0, 0];
+    const pl = Math.hypot(perp[0], perp[1], perp[2]);
+    perp = perp.map(v => v / pl);
+    s = side === 'L' ? perp : perp.map(v => -v);
+  }
+  const t = deg * Math.PI / 180;
+  return u.map((v, i) => Math.cos(t) * v + Math.sin(t) * s[i]);
+}
+const LIST = [
+  ['Basic', [['pipe','Pipe','pipe','p']]],
+  ['Fittings', [
+    ['e90','Elbow 90°','elbow90','f'],['e45','Elbow 45°','elbow45','f'],
+    ['teq','Tee Equal','tee','f'],['ter','Tee Reducing','teeR','f'],
+    ['cap','Cap','cap','f'],['rcc','Reducer Concentric','redC','f'],['rce','Reducer Eccentric','redE','f']]],
+  ['Flanges', [
+    ['fwn','Welding Neck','fl_wn','g'],['fsw','Socket Weld','fl_sw','g'],['fth','Threaded','fl_th','g'],
+    ['fso','Slip-On','fl_so','g'],['flj','Lap-Joint','fl_lj','g'],['fbl','Blind','fl_bl','g']]],
+  ['Valves', [
+    ['gate','Gate','gate','f'],['globe','Globe','globe','f'],['ball','Ball','ball','f'],['plug','Plug','plug','f'],
+    ['bfly','Butterfly','butterfly','f'],['ndl','Needle','needle','f'],['diaph','Diaphragm','diaph','f'],
+    ['yv','Y-type','yv','f'],['three','Three-way','three','f'],['check','Check','check','f'],
+    ['bott','Bottom','bottom','f'],['relief','Relief','relief','f'],['ctrl','Control Straight','ctrl','f'],['ctrlA','Control Angle','ctrlA','f']]],
+  ['Special Items', [
+    ['RO','Restriction Orifice (RO)','ro','s'],['BEND','Pipe Bend, Special Radius','bend','s'],
+    ['SG','Sight Glass (SG)','sg','s'],['HW','Hand Wheel Direction','hw','s'],['YS','Y-type Strainer','ystr','s'],
+    ['CS','Conical Strainer','cstr','s'],['CSB','Conical Strainer Built-in','cstrB','s'],
+    ['ORF','Orifice Assembly','orf','s'],['ORFD','Orifice Assembly (flipped down)','orfd','s'],['MR','Meter Run Orifice','meter','s'],
+    ['WO','Weldolet','weldo','s'],['NO','Nipolet','nipo','s'],['FO','Flangolet','flango','s'],
+    ['SP','Spade (SP)','sp','s'],['SB','Spectacle Blind (SB)','sb','s'],['HB','Hammer Blind (HB)','hb','s'],['SPC','Spacer','spacer','s']]]
+];
+
+const SYMS = {};
+LIST.forEach(([g, arr]) => {
+  const og = document.createElement('optgroup');
+  og.label = g;
+  arr.forEach(([k, n, sh, f]) => { SYMS[k] = {n, sh, f}; og.appendChild(new Option(n, k)); });
+  $('sym').appendChild(og);
+});
+
+let items = [];
+try { const sv = JSON.parse(localStorage.getItem('isoPipeAutosave') || 'null'); if (sv && sv.items) { items = sv.items.map(it => it.key === 'pipe' ? it : Object.assign(it, {len: 0})); window.__pendingMarks = sv.freeMarks || []; window.__pendingArcs = sv.arcs || []; window.__pendingTris = sv.tris || []; } } catch (e) {}
+let anchor = null;            // {idx, x, y, mm, seg} : branch point anywhere on a drawn line
+let segs = [];                // drawn geometry of the last render, used for hit-testing
+const dpr = window.devicePixelRatio || 1;
+let V = {x: 0, y: 0, z: 1};   // screen position of model origin and zoom
+
+function fit() {
+  const a = $('area');
+  if (!a.clientWidth || !a.clientHeight) { requestAnimationFrame(fit); return; }
+  cv.width = a.clientWidth * dpr; cv.height = a.clientHeight * dpr;
+  if (!fit.done) { resetView(); fit.done = true; }
+  render();
+}
+function resetView() {
+  const a = $('area');
+  V = {x: a.clientWidth / 2, y: a.clientHeight / 2, z: 1};
+}
+function zoomAt(mx, my, f) {
+  const nz = Math.min(8, Math.max(0.2, V.z * f));
+  const mxm = (mx - V.x) / V.z, mym = (my - V.y) / V.z;
+  V.z = nz; V.x = mx - mxm * nz; V.y = my - mym * nz;
+  render();
+}
+
+
+// ---- Mirror: the piece turns to the other side of the pipe that comes into it ----
+const cross3 = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const norm3 = v => { const l = Math.hypot(v[0], v[1], v[2]); return l < 1e-9 ? null : v.map(x => x / l); };
+function mirroredVec(v, inc) {
+  // reflect v across the vertical plane that contains the incoming pipe
+  const ni = norm3(inc); if (!ni) return null;
+  const n = norm3(cross3(ni, [0,0,1]));
+  if (!n) return null;
+  const d = v[0]*n[0] + v[1]*n[1] + v[2]*n[2];
+  return v.map((x, j) => Math.round((x - 2*d*n[j]) * 1e6) / 1e6);
+}
+function applyMirror(it, inc) {
+  it.mref = inc || null;               // the plane this piece was mirrored across; downstream pieces use the same plane
+  const v = vecOf(it).slice();
+  const m = inc ? mirroredVec(v, inc) : null;
+  if (!m) {                       // no usable incoming pipe: swap East and West
+    const sw = {N:'N', S:'S', E:'W', W:'E', U:'U', D:'D'};
+    if (!it.c) it.d = sw[it.d] || it.d;
+    return;
+  }
+  if (it.c) { it.c = m; return; }
+  for (const k of Object.keys(BASE)) {
+    const b = BASE[k];
+    if (Math.abs(b[0]-m[0]) < 1e-6 && Math.abs(b[1]-m[1]) < 1e-6 && Math.abs(b[2]-m[2]) < 1e-6) { it.d = k; return; }
+  }
+}
+// pieces added in a row (no branch) start where the previous piece ends
+function reflowChain() {
+  for (let i = 1; i < items.length; i++) {
+    const p = items[i-1];
+    if (!items[i].lin) continue;
+    const [ux, uy] = scrOf(p), l = p.len * SCALE;
+    items[i].x = p.x + ux*l; items[i].y = p.y + uy*l;
+  }
+}
+
+function chainEnd() {
+  const n = items.length, L = items[n - 1];
+  // after a tee the chain continues from the far end of its base (the run), not from the branch
+  if (n >= 2 && L && (L.key === 'teq' || L.key === 'ter') && L.lin) {
+    const [ux, uy] = scrOf(items[n - 2]);
+    return [L.x + ux * 7, L.y + uy * 7];
+  }
+
+  if (!items.length) return [0, 0];
+  const it = items[items.length - 1], [ux, uy] = scrOf(it), l = it.len * SCALE;
+  return [it.x + ux*l, it.y + uy*l];
+}
+
+function grid(w, h) {
+  const A = [G * .866, G * .5], B = [-G * .866, G * .5];
+  const K = Math.min(400, Math.ceil(Math.max(w, h) / (V.z * G)) + 10);
+  ctx.strokeStyle = '#e2dac6'; ctx.lineWidth = 1 / V.z;
+  ctx.beginPath();
+  for (let i = -K; i <= K; i++) {
+    ctx.moveTo(i*A[0] - K*B[0], i*A[1] - K*B[1]);
+    ctx.lineTo(i*A[0] + K*B[0], i*A[1] + K*B[1]);
+  }
+  for (let j = -K; j <= K; j++) {
+    ctx.moveTo(j*B[0] - K*A[0], j*B[1] - K*A[1]);
+    ctx.lineTo(j*B[0] + K*A[0], j*B[1] + K*A[1]);
+  }
+  ctx.stroke();
+}
+
+// Draws one symbol and records its lines (segs) so any point on them can be picked
+// 3D frame in real engineering axes [North, East, Up]:
+// A = pipe axis (mirror reverses it), B = facing axis (perpendicular to A), C = A x B.
+function frameOf(it) {
+  // Every symbol lies in a plane that contains the pipe axis A.
+  // Its normal C is always one of the three world axes (N, E, Up), so it is parallel to that plane.
+  // The pipe axis A always follows the chosen Direction. Mirror only flips the symbol's side (B), never the axis.
+  const A = vecOf(it).slice();
+  const dotA = F => F[0]*A[0] + F[1]*A[1] + F[2]*A[2];
+  const perpOf = F => {
+    const d = dotA(F);
+    const B = F.map((v, j) => v - d * A[j]);
+    const bl = Math.hypot(B[0], B[1], B[2]);
+    return bl < 1e-6 ? null : B.map(v => v / bl);
+  };
+  let B = null;
+  if (it.face) B = perpOf(BASE[it.face].slice());          // chosen facing (ignored if parallel to the pipe)
+  if (!B && it.bs) B = perpOf(it.bs.slice());               // bent piece: the plane of the bend
+  // elbows and tees must lie in the plane of their pipes; straight pieces face the viewer
+  const turning = ['elbow90','elbow45','tee','teeR'].indexOf(it.sh) >= 0;
+  if (!B && it.pd && turning) B = perpOf(it.pd.slice());    // run plane: the plane made by the previous piece and this one
+  if (!B && Math.abs(A[2]) < 1e-6) B = perpOf([0, 0, 1]);   // horizontal pipe: symbol stands upright (vertical plane facing the viewer)
+  if (!B) B = perpOf([0, 1, 0]) || perpOf([1, 0, 0]);       // vertical pipe: symbol lies in the vertical plane along East
+  if (it.flip) B = B.map(v => -v);                          // mirror: the symbol turns to its other side
+  const C = [B[1]*A[2] - B[2]*A[1], B[2]*A[0] - B[0]*A[2], B[0]*A[1] - B[1]*A[0]];
+  return {A, B, C};
+}
+
+function drawItem(it, i, x, y, ux, uy) {
+  const k = it.key, sh = it.sh, SZ = 1.0;          // fitting symbol size on screen
+  const {A, B, C: Cv} = frameOf(it);
+  // the orifice assembly always has its bow-ties on the upper side: flip the across direction when the frame points down
+  const fb = (k === 'ORF' && B[2] < 0) ? -1 : (k === 'ORFD' && B[2] >= 0) ? -1 : 1;
+  // a along the pipe, b across it (facing), v along the third axis, projected with the isometric axes
+  // all symbol geometry lies in the run plane (A, B): the out-of-plane offset v is folded into B
+  // Mirror: reducers turn their big end the other way round (their ports are symmetric, so connections stay right)
+  const fa = (it.flip && (sh === 'redC' || sh === 'redE')) ? -1 : 1;
+  const P = (a, b, v = 0) => {
+    const bb = (b + v) * fb, aa = a * fa;
+    const q = scr([aa*A[0] + bb*B[0], aa*A[1] + bb*B[1], aa*A[2] + bb*B[2]]);
+    return [x + SZ*q[0], y + SZ*q[1]];
+  };
+  const L = (pts, c) => {
+    const m = pts.map(q => P(q[0], q[1], q[2] || 0));
+    ctx.beginPath();
+    m.forEach(([X, Y], j) => j ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y));
+    if (c) ctx.closePath();
+    ctx.stroke();
+    for (let j = 0; j < m.length - 1; j++) segs.push({i, x1: m[j][0], y1: m[j][1], x2: m[j+1][0], y2: m[j+1][1]});
+    if (c && m.length > 2) segs.push({i, x1: m[m.length-1][0], y1: m[m.length-1][1], x2: m[0][0], y2: m[0][1]});
+  };
+  const C = (a, b, r, f, v = 0) => {
+    const [X, Y] = P(a, b, v);
+    // filled dots (weld points, neck and bead dots) are always round on screen, never projected as ovals
+    if (f && r <= 4) {
+      const rw = (r <= 2.6 ? 2.4 : 3.6) / V.z;
+      ctx.beginPath(); ctx.arc(X, Y, rw, 0, Math.PI*2); ctx.fill();
+      segs.push({i, pt: true, x: X, y: Y});
+      return;
+    }
+    ctx.beginPath();
+    for (let q = 0; q <= 40; q++) {
+      const t = q / 40 * Math.PI * 2;
+      const [cx, cy] = P(a + r*Math.cos(t), b + r*Math.sin(t), v);
+      q ? ctx.lineTo(cx, cy) : ctx.moveTo(cx, cy);
+    }
+    ctx.closePath();
+    f ? ctx.fill() : ctx.stroke();
+    segs.push({i, pt: true, x: X, y: Y});
+  };
+  const T = (s, a, b, v = 0) => { const [X, Y] = P(a, b, v); ctx.fillText(s, X, Y); };
+  // bow-tie built from isometric-aligned edges: legs along the pipe and across it, hypotenuse vertical on screen
+  const bow = () => { L([[-10,-6,0],[0,0,0],[-10,6,0],[-10,-6,0]], 1); L([[10,-6,0],[0,0,0],[10,6,0],[10,-6,0]], 1); };   // bow tie: two triangles apex to apex, in the run plane
+
+  // joint markers: ax = 'A' (across a pipe along A), 'B' (pipe along B) or 'V' (pipe along v)
+  // Joint markers enclose the body, one marker at each end of the connection:
+  // BW = solid black dot, SW = bracket open outward, TH = single bar, FL = heavy bar.
+  // c = marker centre, out = direction the pipe continues outward, across = perpendicular to the pipe.
+  let mk = 0;
+  // weld dot: always a round dot on screen (radius in drawing units), whatever the pipe direction
+  const dot = (c, r, fill) => {
+    const [X, Y] = P(c[0], c[1], c[2]);
+    ctx.beginPath(); ctx.arc(X, Y, r, 0, Math.PI * 2);
+    fill ? ctx.fill() : ctx.stroke();
+    segs.push({i, pt: true, x: X, y: Y});
+  };
+  const jm = (j, c, out, across) => {
+    if (['bott','relief','ctrl','ctrlA','orf','RO','CS','CSB','ORF','ORFD'].indexOf(it.key) >= 0) return;   // this symbol is drawn exactly as given, whatever the joint
+    if (['gate','globe','ball','plug','bfly','ndl','diaph','yv','three','check','bott','relief','ctrl'].indexOf(it.key) >= 0 && (j === 'SW' || j === 'TH' || j === 'FL')) return;
+    const add = (p, d, k) => [p[0] + d[0]*k, p[1] + d[1]*k, p[2] + d[2]*k];
+    if (j === 'BW') {
+      const id = mk++, n0 = segs.length, hollow = (it.fw || []).includes(id);
+      const wr = 3.2 / V.z;   // small round weld dot, always drawn in the ink colour
+      if (hollow) { const fs = ctx.fillStyle; ctx.fillStyle = paperFill; dot(c, wr, true); ctx.fillStyle = fs; dot(c, wr, false); }
+      else { ctx.fillStyle = '#1c2530'; dot(c, wr, true); }
+      for (let q = n0; q < segs.length; q++) segs[q].wid = id;
+      return;
+    }
+    if (j === 'SW') { const p1 = add(c, across, 4), p2 = add(c, across, -4); L([add(p1, out, 4), p1, p2, add(p2, out, 4)]); return; }
+    if (j === 'TH') { L([add(c, across, 6), add(c, across, -6)]); return; }   // one line per end, perpendicular to the end
+    if (j === 'FL') { const w0 = ctx.lineWidth, hl = /^elbow/.test(sh) ? 6 : 8; ctx.lineWidth = 4/V.z; L([add(c, across, hl), add(c, across, -hl)]); ctx.lineWidth = w0; }
+  };
+  if (it.f === 'f') {
+    const ax = [1,0,0], bx = [0,1,0], vx = [0,0,1], neg = d => d.map(x => -x);
+    if (sh === 'tee' || sh === 'teeR') {
+      if (sh === 'teeR') {
+        // three vertices: inlet on the pipe, and the two ends of the far side (the outlet is at its midpoint)
+        jm(it.j, [0,-7,0], neg(bx), ax);
+        jm(it.j, [0,7,0], bx, ax);
+        jm(it.j, [7,0,0], ax, bx);
+      } else {
+        jm(it.j, [0,-7,0], neg(bx), ax);
+        jm(it.j, [0,7,0], bx, ax);
+        jm(it.j, [7,0,0], ax, bx);
+      }
+    } else if (sh === 'cap') {
+      if (it.j !== 'BW') jm(it.j, [0,0,0], neg(ax), bx);
+    } else if (sh === 'redC' || sh === 'redE') {
+      if (it.j === 'BW') { jm(it.j, [-8,0,0], neg(ax), bx); jm(it.j, [8,0,0], ax, bx); }
+      else { jm(it.j, [-11,0,0], neg(ax), vx); jm(it.j, [11,0,0], ax, vx); }   // flanged/socket/threaded: a small gap off the end faces, parallel to them
+    } else if (sh === 'ystr_unused') {
+      ctx.strokeStyle = '#1c2530'; ctx.fillStyle = '#1c2530'; ctx.lineWidth = 1.6/V.z;
+      jm(it.j, [0,0,0], [0.707,-0.707,0], [0.707,0.707,0]);
+      // butt weld dots at the ends of the segment, with a white halo so they show on the thick pipe
+      // the two ends of the segment: drawn directly for each joint type
+      for (const sg of [-1, 1]) {
+        const ex = sg * 7;
+        if (it.j === 'BW') { C(ex, 0, 3.2, 1); }
+        else if (it.j === 'FL') { ctx.lineWidth = sw * 1.8; L([[ex,-6,0],[ex,6,0]]); ctx.lineWidth = sw; }
+        else if (it.j === 'TH') { L([[ex,-6,0],[ex,6,0]]); L([[ex - sg*2.5,-6,0],[ex - sg*2.5,6,0]]); }
+        else if (it.j === 'SW') { L([[ex,-6,0],[ex,6,0]]); L([[ex,6,0],[ex + sg*3,8,0]]); L([[ex,-6,0],[ex + sg*3,-8,0]]); }
+      }
+    } else if (sh === 'bottom') {
+      jm(it.j, [-12.5,0,0], neg(ax), bx);
+    } else if (sh === 'three') {
+      jm(it.j, [-8,0,0], neg(ax), bx);
+      jm(it.j, [8,0,0], ax, bx);
+      jm(it.j, [0,8,0], bx, ax);
+    } else if (sh === 'bfly') {
+      jm(it.j, [-10,0,0], neg(ax), bx);
+      jm(it.j, [10,0,0], ax, bx);
+    } else if (sh === 'check') {
+      jm(it.j, [-8,0,0], neg(ax), bx);
+      jm(it.j, [8,0,0], ax, bx);
+    } else if (!sh.startsWith('elbow')) {
+      jm(it.j, [-10,0,0], neg(ax), bx);
+      jm(it.j, [10,0,0], ax, bx);
+    }
+  }
+
+  // Elbow: a true corner between the incoming pipe (previous item) and this item's direction
+  const elbowCorner = () => {
+    const th = sh === 'elbow45' ? Math.PI / 4 : Math.PI / 2;
+    const toL = w => [w[0]*A[0] + w[1]*A[1] + w[2]*A[2], w[0]*B[0] + w[1]*B[1] + w[2]*B[2], w[0]*Cv[0] + w[1]*Cv[1] + w[2]*Cv[2]];
+    const prev = i > 0 ? items[i - 1] : null;
+    let dl;
+    if (prev) { const pv = vecOf(prev), n = Math.hypot(pv[0], pv[1], pv[2]) || 1; dl = toL(pv.map(x => x / n)); }
+    else dl = [Math.cos(th), -Math.sin(th), 0];
+    const inPt = [-8*dl[0], -8*dl[1], -8*dl[2]], outPt = [8, 0, 0];
+    L([inPt, [0,0,0], outPt]);   // elbow legs: thin, like the other fittings
+    // the mark crosses the incoming pipe inside the run plane (the C axis is folded into the run plane when drawing)
+    const o = dl.map(x => -x), cr = [-o[1], o[0], 0], cl = Math.hypot(cr[0], cr[1], cr[2]);
+    const across = cl > 1e-6 ? cr.map(x => x / cl) : [0, 1, 0];
+    jm(it.j, inPt, o, across);
+    jm(it.j, outPt, [1, 0, 0], [0, 1, 0]);
+  };
+  const lw = (exporting ? 1.2 : 0.8) / V.z;   // the pipe has the same line width as the symbol lines   // the pipe width, set explicitly (symbols change the context width)
+  const sw = exporting ? 1.2 / V.z : Math.max(0.8, lw * 0.45);   // symbol lines: thin and clear, thinner than the pipe
+  ctx.lineWidth = sw;
+  switch (sh) {
+    // ---- Fittings: centre-line based, joint mark (BW/SW/TH/FL) drawn at the connection point ----
+    case 'elbow90': case 'elbow45': elbowCorner(); break;
+    case 'tee': L([[0,-7,0],[0,7,0]]); L([[0,0,0],[7,0,0]]); break;
+    case 'teeR': L([[0,-7,0],[7,0,0],[0,7,0],[0,-7,0]]); L([[0,-7,0],[0,7,0]]); L([[7,0,0],[0,0,0]]); break;   // perpendicular from the apex to the base, splitting the triangle in two
+    case 'cap': if (it.j === 'BW') { L([[0,0,-7],[0,0,7]]); ctx.beginPath(); ctx.moveTo(...P(0,0,-7)); ctx.quadraticCurveTo(...P(10,0,0), ...P(0,0,7)); ctx.stroke(); } break;
+    case 'redC': L([[-8,0,-7],[8,0,-4],[8,0,4],[-8,0,7]], 1); break;
+    case 'redE': L([[-8,0,-7],[8,0,-7],[8,0,1],[-8,0,7]], 1); break;
+    // ---- Flanges: flange plate across the pipe, drawn in the pipe-vertical plane ----
+    case 'fl_wn': ctx.beginPath(); ctx.moveTo(...P(-4,-3,0)); ctx.lineTo(...P(0,-6,0)); ctx.lineTo(...P(0,6,0)); ctx.lineTo(...P(-4,3,0)); ctx.closePath(); ctx.fillStyle = '#1c2530'; ctx.fill(); ctx.stroke(); ctx.lineWidth = sw * 1.8; L([[0,-9,0],[0,9,0]]); ctx.lineWidth = sw; C(-4, 0, 2.5, 1); break;
+    case 'fl_so': ctx.lineWidth = sw * 1.8; L([[0,-9,0],[0,9,0]]); ctx.lineWidth = sw; break;
+    case 'fl_sw': ctx.lineWidth = sw * 1.8; L([[0,-9,0],[0,9,0]]); ctx.lineWidth = sw; L([[0,2.5,0],[-6,2.5,0]]); L([[0,-2.5,0],[-6,-2.5,0]]); break;
+    case 'fl_th': { ctx.lineWidth = sw * 1.8; L([[0,-9,0],[0,9,0]]); ctx.lineWidth = sw; const pts = [[-4,-3,0],[0,-3,0],[0,3,0],[-4,3,0]].map(q => P(q[0], q[1], q[2])); ctx.beginPath(); pts.forEach(([X, Y], j) => j ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y)); ctx.closePath(); ctx.fillStyle = '#1c2530'; ctx.fill(); break; }
+    case 'fl_lj': L([[-3,-9,0],[-3,-1.5,0]]); L([[-3,1.5,0],[-3,9,0]]); ctx.lineWidth = sw * 1.8; L([[1,-9,0],[1,9,0]]); ctx.lineWidth = sw; break;
+    case 'fl_bl': ctx.setLineDash([3/V.z, 2/V.z]); L([[-9,0,0],[-1,0,0]]); ctx.setLineDash([]); ctx.setLineDash([3/V.z, 2/V.z]); ctx.lineWidth = sw * 1.8; L([[0,-9,0],[0,9,0]]); ctx.setLineDash([]); ctx.lineWidth = sw; L([[3,-9,0],[3,9,0]]); break;
+    // ---- Valves: bow-tie body in the pipe-vertical plane, actuators and stems above ----
+    case 'gate': bow(); break;
+    case 'globe': bow(); C(0, 0, 5, 1); break;
+    case 'ball': bow(); C(0, 0, 7); break;
+    case 'plug': bow(); L([[0,0,0],[0,0,10],[6,0,10]]); break;
+    case 'butterfly': L([[-10,-8,0],[-10,8,0]]); L([[10,-8,0],[10,8,0]]); L([[-10,8,0],[10,-8,0]]); C(0, 0, 3.6, 1); break;
+    case 'needle': bow(); ctx.beginPath(); ctx.moveTo(...P(0,0,0)); ctx.lineTo(...P(0,0,12)); ctx.stroke(); ctx.beginPath(); ctx.moveTo(...P(-3,0,12)); ctx.lineTo(...P(3,0,12)); ctx.lineTo(...P(0,0,0)); ctx.closePath(); ctx.fillStyle = '#1c2530'; ctx.fill(); ctx.stroke(); break;
+    case 'diaph': bow(); ctx.beginPath(); ctx.moveTo(...P(10,6,0)); ctx.quadraticCurveTo(...P(0,15,0), ...P(-10,6,0)); ctx.stroke(); break;
+    case 'yv': bow(); L([[0,0,0],[-3,6,0]]); break;
+    case 'three': L([[0,0,0],[-8,-6,0],[-8,6,0],[0,0,0]]); L([[0,0,0],[8,-6,0],[8,6,0],[0,0,0]]); L([[0,0,0],[-6,8,0],[6,8,0],[0,0,0]]); break;
+    case 'check': L([[-8,-7,0],[8,0,0],[-8,7,0],[-8,-7,0]]); L([[8,-7,0],[8,7,0]]); break;
+    case 'bottom': L([[0,0,0],[-10,-5,0],[-10,5,0],[0,0,0]]); L([[0,0,0],[-4.6,9.4,0],[4.6,9.4,0],[0,0,0]]); L([[0,0,0],[0,-19,0]]); L([[-4.5,-19,0],[4.5,-19,0]]); ctx.lineWidth = sw * 1.8; L([[-12.5,-5,0],[-12.5,5,0]]); ctx.lineWidth = sw; break;
+    case 'relief': L([[0,0,0],[-10,-5,0],[-10,5,0],[0,0,0]]); L([[0,0,0],[-5,-9.5,0],[5,-9.5,0],[0,0,0]]); L([[-5,-11.5,0],[5,-11.5,0]]); L([[0,-11.5,0],[0,-21,0]]); L([[0,0,0],[0,38,0]]); L([[-4.9,27.1,0],[6.3,33.1,0]]); L([[-4.9,23.0,0],[6.3,29.3,0]]); L([[-4.9,18.1,0],[5.4,23.8,0]]); L([[-4.9,12.5,0],[5.5,18.5,0]]); ctx.lineWidth = sw * 1.8; L([[-12.5,-5,0],[-12.5,5,0]]); ctx.lineWidth = sw; break;
+    case 'ctrl': L([[0,0,0],[-10,5,0],[-10,-5,0],[0,0,0]]); L([[0,0,0],[10,5,0],[10,-5,0],[0,0,0]]); L([[-12,-5,0],[-12,5,0]]); L([[12,-5,0],[12,5,0]]); L([[0,0,0],[-5,25,0],[5,25,0],[0,0,0]]); ctx.setLineDash([3/V.z, 2/V.z]); L([[-0.6,20,0],[16.6,20,0]]); ctx.setLineDash([]); C(16.6 + 3.2, 20, 3.2); break;
+    case 'ctrlA': L([[0,0,0],[-10,5.8,0],[-10,-4.2,0],[0,0,0]]); L([[0,0,0],[-5,20.7,0],[5,20.7,0],[0,0,0]]); L([[0,0,0],[-5,-9.2,0],[5,-9.2,0],[0,0,0]]); ctx.setLineDash([3/V.z, 2/V.z]); L([[0.5,15.2,0],[-17.6,15.2,0]]); ctx.setLineDash([]); C(-17.6 - 3.2, 15.2, 3.2); L([[0,-11.5,0],[0,-26.2,0]]); L([[-5,-11.5,0],[5,-11.5,0]]); ctx.lineWidth = sw * 1.8; L([[-12,-5,0],[-12,5,0]]); ctx.lineWidth = sw; break;
+    // ---- Special items ----
+    case 'ro': L([[-3,0,-6],[-3,0,6]]); L([[3,0,-6],[3,0,6]]); ctx.setLineDash([3/V.z, 2/V.z]); L([[0,0,0],[0,7.5,0]]); ctx.setLineDash([]); C(0, 12, 4.5); ctx.save(); ctx.font = `bold ${24/V.z}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; T('Ro', 0, 12, 0); ctx.restore(); break;
+
+    case 'bw': C(0, 0, 2.2, 1); break;
+    case 'p2p': L([[0,0,0],[0,0,14]]); C(0, 0, 2.2, 1); break;
+    case 'bend': L([[-14,0,0],[-4,0,0],[-4,0,4],[0,0,4],[0,0,14]]); L([[-14,0,-3],[-5,0,-3]]); T('R=', -15, 0, -6); break;
+    case 'sg': L([[-11,0,-4],[-11,0,4]]); L([[11,0,-4],[11,0,4]]); ctx.setLineDash([3/V.z, 2/V.z]); L([[-8.5,0,-5],[-8.5,0,5]]); L([[8.5,0,-5],[8.5,0,5]]); L([[-8.5,0,0],[-6,0,0]]); L([[6,0,0],[8.5,0,0]]); L([[-6,0,-5],[6,0,-5],[6,0,5],[-6,0,5]], 1); ctx.setLineDash([]); ctx.save(); ctx.font = `bold ${20/V.z}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; T('SGI', 0, 0, 0); ctx.restore(); break;
+    case 'hw':
+      ctx.setLineDash([3/V.z, 2/V.z]);
+      L([[-10,-7,0],[-10,7,0],[0,0,0]], 1); L([[10,-7,0],[10,7,0],[0,0,0]], 1);
+      L([[-18,0,0],[-11,0,0]]); L([[11,0,0],[18,0,0]]);
+      ctx.setLineDash([]);
+      L([[0,0,0],[0,0,11]]);
+      ctx.beginPath(); ctx.moveTo(...P(-3,0,11)); ctx.lineTo(...P(0,0,15)); ctx.lineTo(...P(3,0,11)); ctx.closePath();
+      ctx.fillStyle = '#1c2530'; ctx.fill(); ctx.stroke();
+      break;
+    case 'ystr': {
+      ctx.strokeStyle = '#1c2530'; ctx.fillStyle = '#1c2530';
+      L([[-7,0,0],[7,0,0]]);
+      L([[0,0,0],[14.14,-14.14,0]]); L([[18.38,-9.9,0],[9.9,-18.38,0]]); L([[20.14,-11.66,0],[11.66,-20.14,0]]);
+      const J = it.j;   // the joint marks are only at the two ends of the segment, not at the middle
+      for (const sg of [-1, 1]) {
+        const ex = sg * 7;
+        if (J === 'BW') { C(ex, 0, 3.2, 1); }
+        else if (J === 'FL') { ctx.lineWidth = sw * 1.8; L([[ex,-6,0],[ex,6,0]]); ctx.lineWidth = sw; }
+        else if (J === 'TH') { L([[ex,-6,0],[ex,6,0]]); L([[ex - sg*2.5,-6,0],[ex - sg*2.5,6,0]]); }
+        else if (J === 'SW') { L([[ex,-6,0],[ex,6,0]]); L([[ex,6,0],[ex + sg*3,8,0]]); L([[ex,-6,0],[ex + sg*3,-8,0]]); }
+      }
+      break;
+    }
+    case 'cstr': ctx.setLineDash([5/V.z, 3.5/V.z]); L([[0,0,0],[14,9,0],[14,-9,0],[0,0,0]], 1); L([[14,-12.7,0],[14,12.7,0]]); ctx.setLineDash([]); break;
+    case 'cstrB': ctx.setLineDash([5/V.z, 3.5/V.z]); L([[0,0,0],[10,5,0],[10,-5,0],[0,0,0]], 1); L([[13,-7,0],[13,7,0]]); ctx.setLineDash([]); L([[0,0,0],[10,0,0]]); L([[10,-7.5,0],[10,7.5,0]]); L([[16,-7.5,0],[16,7.5,0]]); break;
+    case 'orfd':
+    case 'orf': ctx.setLineDash([5/V.z, 3.5/V.z]); C(0, 0, 12.6); L([[0,-12.6,0],[0,12.6,0]]); L([[-12.6,0,0],[12.6,0,0]]); L([[-10.5,10.35,0],[-5.65,5.65,0]]); L([[10.5,10.35,0],[5.65,5.65,0]]); ctx.setLineDash([]);
+      L([[-20.6,15.2,0],[-16.8,20.8,0]]); L([[-16.8,20.8,0],[-12.5,7.5,0]]); L([[-12.5,7.5,0],[-8.7,13.2,0]]); L([[-8.7,13.2,0],[-20.6,15.2,0]]);
+      L([[20.6,15.2,0],[16.8,20.8,0]]); L([[16.8,20.8,0],[12.5,7.5,0]]); L([[12.5,7.5,0],[8.7,13.2,0]]); L([[8.7,13.2,0],[20.6,15.2,0]]); break;
+    case 'meter': ctx.setLineDash([5/V.z, 3.5/V.z]); L([[-5.5,-9.7,0],[-5.5,9.7,0]]); L([[6,-9.7,0],[6,9.7,0]]); ctx.setLineDash([]); L([[0,-10,0],[0,19,0]]); C(0, 24, 5); break;
+    case 'weldo': L([[-7,0,0],[0,7,0],[7,0,0],[0,-7,0],[-7,0,0]],1); L([[0,7,0],[0,36,0]]); C(0, 7, 4.6, 1); if (it.j === 'BW') { C(-7, 0, 3.2, 1); C(7, 0, 3.2, 1); } break;
+    case 'nipo': L([[-7,0,0],[0,7,0],[7,0,0],[0,-7,0],[-7,0,0]],1); L([[0,7,0],[0,41,0]]); C(0, 24, 4.6, 1); if (it.j === 'BW') { C(-7, 0, 3.2, 1); C(7, 0, 3.2, 1); } break;
+    case 'flango': L([[-7,0,0],[0,7,0],[7,0,0],[0,-7,0],[-7,0,0]],1); L([[0,7,0],[0,41,0]]); L([[-11,41,0],[11,41,0]]); if (it.j === 'BW') { C(-7, 0, 3.2, 1); C(7, 0, 3.2, 1); } break;
+    case 'sp': L([[-3.4,-7.5,0],[-3.4,7.5,0]]); L([[3.3,-7.5,0],[3.3,7.5,0]]); ctx.setLineDash([5/V.z, 3.5/V.z]); L([[0,-7.8,0],[0,15.3,0]]); ctx.setLineDash([]); C(0, 19.9, 4.6, 1); ctx.save(); ctx.font = `bold ${12/V.z}px sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; T('SP', -7, 19.9, 0); ctx.restore(); if (it.j === 'BW') { C(-3.4, 0, 3.2, 1); C(3.4, 0, 3.2, 1); } break;
+    case 'sb': L([[-3.4,-7.5,0],[-3.4,7.5,0]]); L([[3.3,-7.5,0],[3.3,7.5,0]]); ctx.setLineDash([5/V.z, 3.5/V.z]); L([[0,-7.8,0],[0,15.3,0]]); ctx.setLineDash([]); C(0, 19.9, 4.6, 1); C(0, 29.1, 4.6); ctx.save(); ctx.font = `bold ${12/V.z}px sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; T('SB', -7, 29.1, 0); ctx.restore(); if (it.j === 'BW') { C(-3.4, 0, 3.2, 1); C(3.4, 0, 3.2, 1); } break;
+    case 'hb': L([[-3.4,-7.5,0],[-3.4,7.5,0]]); L([[3.3,-7.5,0],[3.3,7.5,0]]); ctx.setLineDash([5/V.z, 3.5/V.z]); L([[0,-15.8,0],[0,15.8,0]]); ctx.setLineDash([]); C(0, 20.4, 4.6, 1); C(0, -20.4, 4.6); ctx.save(); ctx.font = `bold ${12/V.z}px sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; T('HB', -7, 20.4, 0); ctx.restore(); if (it.j === 'BW') { C(-3.4, 0, 3.2, 1); C(3.4, 0, 3.2, 1); } break;
+    case 'spacer': L([[-6,0,-8],[-6,0,8]]); L([[6,0,-8],[6,0,8]]); ctx.setLineDash([2/V.z, 2/V.z]); L([[-4,0,-7],[4,0,-7],[4,0,7],[-4,0,7]], 1); ctx.setLineDash([]); if (it.j === 'BW') { C(-6, 0, 3.2, 1); C(6, 0, 3.2, 1); } break;
+    default: break;
+  }
+  // end markers: for valves a flange face with a gap, or for socket weld and threaded a box as wide as the triangle, touching it
+  const VK = ['gate','globe','ball','plug','bfly','ndl','diaph','yv','three','check','bott','relief','ctrl'];
+  if (VK.indexOf(it.key) >= 0 && ['bott','relief','ctrl','ctrlA'].indexOf(it.key) < 0 && (it.j === 'FL' || it.j === 'SW' || it.j === 'TH')) {
+    ctx.strokeStyle = '#1c2530';
+    if (it.key === 'three') {
+      if (it.j === 'FL') {
+        ctx.lineWidth = sw * 1.8;
+        for (const sg of [-1, 1]) L([[sg*10.5, -6, 0], [sg*10.5, 6, 0]]);
+        L([[-6, 10.5, 0], [6, 10.5, 0]]);
+        ctx.lineWidth = sw;
+      }
+      if (it.j === 'SW' || it.j === 'TH') {
+        ctx.lineWidth = sw;
+        for (const sg of [-1, 1]) L([[sg*8, -6, 0], [sg*12, -6, 0], [sg*12, 6, 0], [sg*8, 6, 0], [sg*8, -6, 0]]);
+        L([[-6, 8, 0], [6, 8, 0], [6, 12, 0], [-6, 12, 0], [-6, 8, 0]]);
+      }
+    } else {
+      for (const sg of (it.key === 'bott' ? [1] : [-1, 1])) {
+        if (it.j === 'FL') { ctx.lineWidth = sw * 1.8; L([[sg*12.5, -6, 0], [sg*12.5, 6, 0]]); ctx.lineWidth = sw; }
+        else { const a0 = it.key === 'check' ? 8 : 10, hh = it.key === 'check' ? 7 : 6; ctx.lineWidth = sw; L([[sg*a0, -hh, 0], [sg*(a0+4), -hh, 0], [sg*(a0+4), hh, 0], [sg*a0, hh, 0], [sg*a0, -hh, 0]]); }   // check: the boxes touch its base and its closing bar
+      }
+    }
+  }
+  // Symbols without their own branch or stem show the chosen facing with a short stub
+  const native = ['elbow90','elbow45','tee','teeR','weldo','nipo','flango','ctrl','ctrlA','relief','three','needle','plug','yv','bottom','hw','bend','orf','meter','ro','sg','bw','p2p','sp','sb','hb','fw','spacer','cstr','cstrB','ystr','fl_wn','fl_lj','fl_bl'];
+  if (it.face && sh !== 'pipe' && !native.includes(sh)) L([[0,0,0],[0,0,12]]);
+}
+
+// pr = pixel ratio, bg = background colour or null, showGrid/ui = screen-only extras
+let paperFill = '#f5f2e8';
+let exporting = false;
+let freeMarks = window.__pendingMarks || [];
+let arcs = window.__pendingArcs || [];
+let bendMode = false, bendPts = [];
+let startMode = false, freeStart = null;
+let triMode = false, triPts = [], tris = window.__pendingTris || [];      // field marks placed anywhere on the drawing: {x, y} in drawing coordinates   // true only while the final image is drawn: dimensions appear there only
+let weldMode = false;
+function paint(pr, bg, showGrid, ui) {
+  paperFill = bg || '#f5f2e8';
+  const w = cv.width / dpr, h = cv.height / dpr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); }
+  ctx.setTransform(pr*V.z, 0, 0, pr*V.z, pr*V.x, pr*V.y);
+  if (showGrid) grid(w, h);
+
+  ctx.font = `${11/V.z}px "IBM Plex Sans", Tahoma, Arial, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = '#1c2530'; ctx.fillStyle = '#1c2530'; ctx.lineWidth = (pr > 1 ? 1.2 : 0.8) / V.z;   // pipe: the same line width as the symbol lines on the printed sheet
+
+  segs = [];
+  const dimList = [];
+  const partOf = [];
+  bomData().forEach(r => r.idx.forEach(n => partOf[n - 1] = r.no));
+  // Text with a thin white halo so it stays readable where it crosses lines
+  const label = (t, x, y, color, align) => {
+    ctx.save();
+    ctx.textAlign = align || 'center';
+    ctx.lineWidth = 4 / V.z; ctx.strokeStyle = '#ffffff';
+    ctx.strokeText(t, x, y);
+    ctx.fillStyle = color; ctx.fillText(t, x, y);
+    ctx.restore();
+  };
+  // origin mark is drawn first so the weld dots at the origin stay visible and tappable
+  ctx.fillStyle = ACC;
+  ctx.beginPath(); ctx.arc(0, 0, 0.8/V.z, 0, Math.PI*2); ctx.fill();
+  ctx.fillText('0', -10/V.z, 12/V.z);
+  ctx.fillStyle = '#1c2530';
+  const reqs = [];
+  items.forEach((it, i) => {
+    const [ux, uy] = scrOf(it);
+    drawItem(it, i, it.x, it.y, ux, uy);
+    const off = 18 / V.z;                        // same label distance on screen and in the export
+    const nx = -uy, ny = ux;                     // side of the pipe used for labels
+    const x2 = it.x + ux*it.len*SCALE, y2 = it.y + uy*it.len*SCALE;
+    if (it.len) {
+      // pipe = single centre line. It stops at the edge of any fitting body, never through its centre.
+      const near = (ax, ay, bx, by) => Math.abs(ax - bx) < 1e-3 && Math.abs(ay - by) < 1e-3;
+      // distance from the connection point to the edge of each symbol's body, measured along the pipe
+      const PORT = {
+        fwn: {back: 4, fwd: 0}, fso: {back: 0, fwd: 0}, fsw: {back: 0, fwd: 0}, fth: {back: 4, fwd: 0},
+        flj: {back: -1, fwd: 1}, fbl: {back: 9, fwd: 0}, cap: {back: 0, fwd: 0},
+        teq: {back: 7, fwd: 0}, ter: {back: 7, fwd: 0}, orf: {back: 3, fwd: 3}, RO: {back: 3, fwd: 3}, CS: {back: 0, fwd: 14}, CSB: {back: 0, fwd: 16}, WO: {back: 7, fwd: 7}, NO: {back: 7, fwd: 7}, FO: {back: 7, fwd: 7}, SP: {back: 3.4, fwd: 3.3}, SPC: {back: 6, fwd: 6}, SB: {back: 3.4, fwd: 3.3}, HB: {back: 3.4, fwd: 3.3}, ORF: {back: 12.6, fwd: 12.6}, ORFD: {back: 12.6, fwd: 12.6}, MR: {back: 5.5, fwd: 6}, YS: {back: 7, fwd: 7}, SG: {back: 11, fwd: 11}, HW: {back: 18, fwd: 18}, bfly: {back: 10, fwd: 10}, check: {back: 8, fwd: 8}, three: {back: 8, fwd: 8}
+      };
+      const portOf = q => PORT[q.key] || {back: 10, fwd: 10};   // valves: bow legs at 10; everything else 8 by default
+      const isValve = q => ['gate','globe','ball','plug','bfly','ndl','diaph','yv','three','check','bott','relief','ctrl'].indexOf(q.key) >= 0;
+      // a flanged joint adds the thickness of its face plate (2.5) on that side, so the pipe stops at the outer face
+      const thick = q => q.key === 'YS' ? 0 : (q.key === 'bott' || q.key === 'relief' || q.key === 'ctrl' || q.key === 'ctrlA') ? 2.5 : ['bott','relief','ctrl','ctrlA'].indexOf(q.key) >= 0 ? 0 : ((q.j === 'FL' && !/^elbow/.test(q.sh || '')) ? 2.5 : ((isValve(q) && (q.j === 'SW' || q.j === 'TH')) ? 4 : 0));
+      const back = q => (PORT[q.key] ? PORT[q.key].back : (isValve(q) ? 10 : 8)) + thick(q);
+      const fwd = q => (q.pairB ? 4 : (PORT[q.key] ? PORT[q.key].fwd : (isValve(q) ? 10 : 8))) + thick(q);
+      const pv = i > 0 ? items[i-1] : null, nx = items[i+1] || null;
+      const isP = q => q.key === 'pipe';
+      const t0 = !isP(it) ? fwd(it) : (pv && !isP(pv) && pv.len === 0 && near(pv.x, pv.y, it.x, it.y) ? fwd(pv) : 0);
+      const t1 = (nx && !isP(nx) && near(nx.x, nx.y, x2, y2)) ? back(nx) : 0;
+      const L0 = it.len * SCALE;
+      const ok = L0 > t0 + t1 + 0.5;
+      const p0x = it.x + ux*(ok ? t0 : 0), p0y = it.y + uy*(ok ? t0 : 0);
+      const p1x = x2 - ux*(ok ? t1 : 0), p1y = y2 - uy*(ok ? t1 : 0);
+      if (ok) { ctx.lineWidth = (exporting ? 1.2 : 0.8) / V.z; ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(p1x, p1y); ctx.stroke(); }
+      segs.push({i, x1: p0x, y1: p0y, x2: p1x, y2: p1y});
+      dimList.push({idx: i, p0: {x: p0x, y: p0y}, p1: {x: p1x, y: p1y}, ux, uy, len: it.len, lbl: it.lbl || ''});
+      segs.push({i, pt: true, endPt: true, x: x2, y: y2, wid: 'end'});
+      if (it.fe) { const fs0 = ctx.fillStyle; ctx.fillStyle = paperFill; ctx.beginPath(); ctx.arc(x2, y2, 1.4, 0, Math.PI*2); ctx.fill(); ctx.stroke(); ctx.fillStyle = fs0; }
+    }
+    // On the drawing: only the item number and, for pipes, the length (kept away from the symbols).
+    // Size, schedule/class and the full description are shown in the BOM table only.
+    // item number: circled, with a thin arrow pointing to the item (mid-point of a pipe, or the piece itself)
+    const tgt = (it.key === 'pipe' && it.len) ? {x: (it.x + x2)/2, y: (it.y + y2)/2} : {x: it.x, y: it.y};
+    reqs.push({t: String(partOf[i]), num: true, x: tgt.x, y: tgt.y, c: ACC});
+  });
+
+  // free field marks: hollow circle, same look as a hollow weld dot
+  if (bendMode || triMode) {
+    ctx.strokeStyle = '#1f6fd1'; ctx.lineWidth = 2/V.z;
+    for (const q of pipeEnds()) { ctx.beginPath(); ctx.arc(q.x, q.y, 9/V.z, 0, Math.PI*2); ctx.stroke(); }
+    for (const q of bendPts.concat(triPts)) { ctx.fillStyle = '#1f6fd1'; ctx.beginPath(); ctx.arc(q.x, q.y, 6/V.z, 0, Math.PI*2); ctx.fill(); }
+  }
+  if (freeStart) {
+    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2/V.z;
+    ctx.beginPath(); ctx.arc(freeStart.x, freeStart.y, 6/V.z, 0, Math.PI*2); ctx.stroke();
+  }
+  tris.forEach(t => {
+    const tl = (exporting ? 1.2 : 0.8) / V.z;
+    // a side that lies along a pipe stays black; the other sides are red
+    const pipesL = items.filter(it => it.key === 'pipe').map(it => { const [ux, uy] = scrOf(it), l = it.len * SCALE; return {s: [it.x, it.y], e: [it.x + ux*l, it.y + uy*l]}; });
+    const onPipe = (A, B) => pipesL.some(pp => { const dx = pp.e[0] - pp.s[0], dy = pp.e[1] - pp.s[1], L = Math.hypot(dx, dy) || 1; const dA = Math.abs((A.x - pp.s[0])*dy - (A.y - pp.s[1])*dx) / L, dB = Math.abs((B.x - pp.s[0])*dy - (B.y - pp.s[1])*dx) / L; return dA < 1.5 && dB < 1.5; });
+    for (let i = 0; i < 3; i++) { const A = t.p[i], B = t.p[(i + 1) % 3]; ctx.strokeStyle = onPipe(A, B) ? '#1c2530' : '#c0392b'; ctx.lineWidth = tl; ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); }
+    ctx.beginPath(); triHatch(t).forEach(seg => { ctx.moveTo(seg[0][0], seg[0][1]); ctx.lineTo(seg[1][0], seg[1][1]); }); ctx.stroke();
+  });
+  arcs.forEach(a => {
+    const dx = a.p2.x - a.p1.x, dy = a.p2.y - a.p1.y, d = Math.hypot(dx, dy) || 1;
+    const rr = Math.max(a.r * SCALE, d / 2 + 0.01);
+    const h = Math.sqrt(rr*rr - (d/2)*(d/2));
+    // the arc bulges outward: choose the side whose arc midpoint is farther from the middle of the pipe ends
+    const mx = (a.p1.x + a.p2.x) / 2, my = (a.p1.y + a.p2.y) / 2;
+    const ends = pipeEnds();
+    const gx = ends.length ? ends.reduce((t, q) => t + q.x, 0) / ends.length : mx;
+    const gy = ends.length ? ends.reduce((t, q) => t + q.y, 0) / ends.length : my;
+    const candC = [[mx - dy / d * h, my + dx / d * h], [mx + dy / d * h, my - dx / d * h]];
+    const midOf = c => { const ux = mx - c[0], uy = my - c[1], ul = Math.hypot(ux, uy) || 1; return [c[0] + ux / ul * rr, c[1] + uy / ul * rr]; };
+    const dist = m => Math.hypot(m[0] - gx, m[1] - gy);
+    const best = dist(midOf(candC[0])) >= dist(midOf(candC[1])) ? candC[0] : candC[1];
+    const cx = best[0], cy = best[1];
+    const a1 = Math.atan2(a.p1.y - cy, a.p1.x - cx), a2 = Math.atan2(a.p2.y - cy, a.p2.x - cx);
+    let delta = a2 - a1; while (delta > Math.PI) delta -= 2*Math.PI; while (delta < -Math.PI) delta += 2*Math.PI;
+    ctx.strokeStyle = '#1c2530'; ctx.lineWidth = 1.6/V.z;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, a1, a1 + delta, delta < 0); ctx.stroke();
+    // leader: from the middle of the arc, pointing outward, with R= and the note at its end
+    const mid = midOf(best), ox = mid[0] - cx, oy = mid[1] - cy, ol = Math.hypot(ox, oy) || 1;
+    const ex = mid[0] + ox / ol * 16, ey = mid[1] + oy / ol * 16;
+    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(mid[0], mid[1]); ctx.stroke();
+    const ah = 3/V.z, ang = Math.atan2(mid[1] - ey, mid[0] - ex);
+    ctx.beginPath(); ctx.moveTo(mid[0], mid[1]);
+    ctx.lineTo(mid[0] - ah*Math.cos(ang - 0.4), mid[1] - ah*Math.sin(ang - 0.4));
+    ctx.moveTo(mid[0], mid[1]);
+    ctx.lineTo(mid[0] - ah*Math.cos(ang + 0.4), mid[1] - ah*Math.sin(ang + 0.4));
+    ctx.stroke();
+    // the text sits beyond the tip of the arrow, on the outer side, so it does not touch the line
+    const tx = ex + ox / ol * 4, ty = ey + oy / ol * 4;
+    ctx.fillStyle = '#1c2530'; ctx.font = `bold ${13/V.z}px sans-serif`; ctx.textBaseline = 'middle';
+    ctx.textAlign = ox < 0 ? 'right' : 'left';
+    ctx.fillText('R=' + (a.lbl || ''), tx, ty);
+  });
+  freeMarks.forEach(m => {
+    ctx.fillStyle = paperFill; ctx.strokeStyle = '#1c2530'; ctx.lineWidth = 1.6/V.z;
+    ctx.beginPath(); ctx.arc(m.x, m.y, 6/V.z, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    segs.push({i: -1, pt: true, x: m.x, y: m.y});
+  });
+
+  // Place labels: try positions around the wanted spot; keep only those that do not touch a drawn line or another label
+  const placed = [];
+  const clear = (x0, y0, x1, y1) => {
+    const m = 6 / V.z;
+    const X0 = x0 - m, Y0 = y0 - m, X1 = x1 + m, Y1 = y1 + m;
+    const inside = (x, y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
+    for (const q of segs) {
+      if (q.pt) { if (inside(q.x, q.y)) return false; continue; }
+      for (let t = 0; t <= 1; t += 0.04) if (inside(q.x1 + (q.x2 - q.x1)*t, q.y1 + (q.y2 - q.y1)*t)) return false;
+    }
+    for (const r of placed) if (!(x1 < r[0] || x0 > r[2] || y1 < r[1] || y0 > r[3])) return false;
+    return true;
+  };
+  for (const r of reqs) {
+    if (r.num) {
+      // circle with the number inside, a thin leader from the circle to the item, arrowhead on the item
+      const rad = 11 / V.z, fs = 13 / V.z;
+      ctx.font = `bold ${fs}px "IBM Plex Sans", Tahoma, Arial, sans-serif`;
+      let spot = null;
+      for (const dist of [22, 30, 40, 52, 66]) {
+        for (let k = 0; k < 16 && !spot; k++) {
+          const an = k / 16 * Math.PI * 2;
+          const cx = r.x + Math.cos(an) * dist / V.z, cy = r.y + Math.sin(an) * dist / V.z;
+          const mg = 7 / V.z; if (clear(cx - rad - mg, cy - rad - mg, cx + rad + mg, cy + rad + mg)) spot = [cx, cy];
+        }
+        if (spot) break;
+      }
+      if (!spot) spot = [r.x - 22 / V.z, r.y - 22 / V.z];
+      placed.push([spot[0] - rad, spot[1] - rad, spot[0] + rad, spot[1] + rad]);
+      const dx = r.x - spot[0], dy = r.y - spot[1], dl = Math.hypot(dx, dy) || 1;
+      const ux = dx / dl, uy = dy / dl;
+      ctx.save();
+      ctx.strokeStyle = '#1c2530'; ctx.fillStyle = '#1c2530';
+      ctx.lineWidth = 0.8 / V.z;
+      ctx.beginPath(); ctx.moveTo(spot[0] + ux*rad, spot[1] + uy*rad); ctx.lineTo(r.x, r.y); ctx.stroke();
+      const AH = 6 / V.z, bx = r.x - ux*AH, by = r.y - uy*AH, wx = -uy*AH*0.35, wy = ux*AH*0.35;
+      ctx.beginPath(); ctx.moveTo(r.x, r.y); ctx.lineTo(bx + wx, by + wy); ctx.lineTo(bx - wx, by - wy); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.arc(spot[0], spot[1], rad, 0, Math.PI*2);
+      ctx.fillStyle = paperFill; ctx.fill(); ctx.lineWidth = 0.8 / V.z; ctx.strokeStyle = '#1c2530'; ctx.stroke();
+      ctx.fillStyle = r.c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(r.t, spot[0], spot[1] + 0.5 / V.z);
+      ctx.restore();
+      continue;
+    }
+    const fs = 11 / V.z;
+    ctx.font = `${fs}px "IBM Plex Sans", Tahoma, Arial, sans-serif`;
+    const w = ctx.measureText(r.t).width, h = fs * 1.1;
+    let spot = null;
+    for (const dist of [0, 14, 24, 36, 50, 66]) {
+      for (let k = 0; k < 16 && !spot; k++) {
+        const an = k / 16 * Math.PI * 2;
+        const cx = r.x + Math.cos(an) * dist / V.z, cy = r.y + Math.sin(an) * dist / V.z;
+        if (clear(cx - w/2, cy - h/2, cx + w/2, cy + h/2)) spot = [cx, cy];
+      }
+      if (spot) break;
+    }
+    if (!spot) spot = [r.x, r.y];
+    placed.push([spot[0] - w/2, spot[1] - h/2, spot[0] + w/2, spot[1] + h/2]);
+    label(r.t, spot[0], spot[1], r.c);
+  }
+
+  if (exporting) {
+    // Technical dimension on every drawn length: extension lines perpendicular to the line,
+    // a dimension line with arrows, and the value centred ABOVE the dimension line and parallel to it.
+    // The text always reads upright (angle kept within -90..90 degrees), in any direction.
+    const EXT_GAP = 3/V.z, EXT_OVER = 6/V.z, ARW = 4.5/V.z, D0 = 22/V.z, TXT = 11/V.z;
+    const lineClear = (P, Q) => {
+      for (let t = 0; t <= 1; t += 0.02) {
+        const x = P.x + (Q.x - P.x)*t, y = P.y + (Q.y - P.y)*t;
+        for (const r of placed) if (x >= r[0] - 2/V.z && x <= r[2] + 2/V.z && y >= r[1] - 2/V.z && y <= r[3] + 2/V.z) return false;
+      }
+      return true;
+    };
+    const clearBox = (x0, y0, x1, y1, idx) => {
+      const m = 4/V.z, X0 = x0-m, Y0 = y0-m, X1 = x1+m, Y1 = y1+m;
+      const inside = (x, y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
+      for (const q of segs) {
+        if (q.i === idx) continue;
+        if (q.pt) { if (inside(q.x, q.y)) return false; continue; }
+        for (let t = 0; t <= 1; t += 0.05) if (inside(q.x1 + (q.x2-q.x1)*t, q.y1 + (q.y2-q.y1)*t)) return false;
+      }
+      for (const r of placed) if (!(x1 < r[0] || x0 > r[2] || y1 < r[1] || y0 > r[3])) return false;
+      return true;
+    };
+    const bboxOf = pts => [Math.min(...pts.map(q=>q.x)), Math.min(...pts.map(q=>q.y)), Math.max(...pts.map(q=>q.x)), Math.max(...pts.map(q=>q.y))];
+    ctx.save();
+    ctx.lineWidth = 1.1/V.z; ctx.strokeStyle = '#1f6fd1'; ctx.fillStyle = '#1f6fd1';
+    ctx.font = `${TXT}px "IBM Plex Sans", Tahoma, Arial, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const d of dimList) {
+      const {idx, p0, p1, ux, uy, len, lbl} = d;
+      if (!lbl) continue;                       // no text typed: no dimension at all
+      // perpendicular to the line, inside the plane of the line
+      const pe = Math.abs(ux) < 1e-6 ? {x: -0.8660254, y: -0.5} : {x: 0, y: -1};
+      // reading angle of the text, kept upright
+      let th = Math.atan2(uy, ux);
+      if (th > Math.PI/2) th -= Math.PI;
+      if (th <= -Math.PI/2) th += Math.PI;
+      const tdx = Math.cos(th), tdy = Math.sin(th);          // along the text
+      const nup = {x: Math.sin(th), y: -Math.cos(th)};       // "above" the text
+      const sg = (nup.x*pe.x + nup.y*pe.y) >= 0 ? 1 : -1;     // dimension is placed on the side the text grows to
+      const txt = lbl;
+      const tw = ctx.measureText(txt).width, tH = TXT*1.25, gap = TXT*0.4;
+      let pick = null;
+      for (const extra of [0]) {
+        const D = D0 + extra/V.z;
+        const A = {x: p0.x + pe.x*sg*D, y: p0.y + pe.y*sg*D}, B = {x: p1.x + pe.x*sg*D, y: p1.y + pe.y*sg*D};
+        const mx = (A.x+B.x)/2, my = (A.y+B.y)/2;
+        const cx = mx + nup.x*(gap + tH/2), cy = my + nup.y*(gap + tH/2);
+        const corners = [[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b]) => ({x: cx + tdx*a*tw/2 + nup.x*b*tH/2, y: cy + tdy*a*tw/2 + nup.y*b*tH/2}));
+        const [tx0, ty0, tx1, ty1] = bboxOf(corners);
+        const [lx0, ly0, lx1, ly1] = bboxOf([A, B]);
+        if (clearBox(tx0, ty0, tx1, ty1, idx) && lineClear(A, B)) { pick = {A, B, cx, cy}; break; }
+      }
+      if (!pick) {
+        const D = D0;
+        const A = {x: p0.x + pe.x*sg*D, y: p0.y + pe.y*sg*D}, B = {x: p1.x + pe.x*sg*D, y: p1.y + pe.y*sg*D};
+        const mx = (A.x+B.x)/2, my = (A.y+B.y)/2;
+        pick = {A, B, cx: mx + nup.x*(gap + tH/2), cy: my + nup.y*(gap + tH/2)};
+      }
+      const {A, B, cx, cy} = pick;
+      const D = Math.hypot(A.x - p0.x, A.y - p0.y);
+      // extension lines (from the symbol edge, perpendicular to the line)
+      const ext = P => { ctx.beginPath(); ctx.moveTo(P.x + pe.x*sg*EXT_GAP, P.y + pe.y*sg*EXT_GAP); ctx.lineTo(P.x + pe.x*sg*(D+EXT_OVER), P.y + pe.y*sg*(D+EXT_OVER)); ctx.stroke(); };
+      ext(p0); ext(p1);
+      // dimension line
+      ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+      // arrows touching the extension lines, pointing outward
+      const arrow = (T, d) => {
+        const bx = T.x + d.x*ARW, by = T.y + d.y*ARW, wx = -d.y*ARW*0.28, wy = d.x*ARW*0.28;
+        ctx.beginPath(); ctx.moveTo(T.x, T.y); ctx.lineTo(bx+wx, by+wy); ctx.lineTo(bx-wx, by-wy); ctx.closePath(); ctx.fill();
+      };
+      arrow(A, {x: ux, y: uy}); arrow(B, {x: -ux, y: -uy});
+      // value above the dimension line, centred and parallel to it
+      ctx.save();
+      ctx.translate(cx, cy); ctx.rotate(th);
+      ctx.lineWidth = 3/V.z; ctx.strokeStyle = paperFill; ctx.strokeText(txt, 0, 0);
+      ctx.fillStyle = '#1f6fd1'; ctx.fillText(txt, 0, 0);
+      ctx.restore();
+      placed.push(bboxOf([{x: cx - tdx*tw/2 - nup.x*tH/2, y: cy - tdy*tw/2 - nup.y*tH/2}, {x: cx + tdx*tw/2 + nup.x*tH/2, y: cy + tdy*tw/2 + nup.y*tH/2}, {x: cx + tdx*tw/2 - nup.x*tH/2, y: cy + tdy*tw/2 - nup.y*tH/2}, {x: cx - tdx*tw/2 + nup.x*tH/2, y: cy - tdy*tw/2 + nup.y*tH/2}]));
+    }
+
+    // text typed for a symbol: an arrow leaves the symbol and the text is written at its end
+    items.forEach((it, idx) => {
+      if (it.key === 'pipe' || !it.lbl) return;
+      const O = {x: it.x, y: it.y}, ARW = 5/V.z, TIP = 9/V.z, L = 58/V.z;
+      const txt = it.lbl, tw = ctx.measureText(txt).width, tH = TXT*1.25;
+      const cands = [];
+      for (let q = 0; q < 16; q++) { const an = q/16*Math.PI*2 - Math.PI/2; cands.push({x: Math.cos(an), y: Math.sin(an)}); }
+      let pick = null;
+      for (const d of cands) {
+        const tip = {x: O.x + d.x*TIP, y: O.y + d.y*TIP};
+        const T = {x: O.x + d.x*L, y: O.y + d.y*L};
+        const C = {x: T.x + d.x*(TXT*0.8 + Math.abs(d.x)*tw/2), y: T.y + d.y*(TXT*0.8 + Math.abs(d.y)*tH/2)};
+        if (clearBox(C.x - tw/2, C.y - tH/2, C.x + tw/2, C.y + tH/2, idx) && clearBox(Math.min(tip.x,T.x), Math.min(tip.y,T.y), Math.max(tip.x,T.x), Math.max(tip.y,T.y), idx)) { pick = {d, tip, T, C}; break; }
+      }
+      if (!pick) { const d = cands[0]; const tip = {x: O.x + d.x*TIP, y: O.y + d.y*TIP}, T = {x: O.x + d.x*L, y: O.y + d.y*L}; pick = {d, tip, T, C: {x: T.x + d.x*TXT, y: T.y + d.y*TXT}}; }
+      const {d, tip, T, C} = pick;
+      ctx.beginPath(); ctx.moveTo(tip.x + d.x*ARW, tip.y + d.y*ARW); ctx.lineTo(T.x, T.y); ctx.stroke();
+      const pe = {x: -d.y, y: d.x}, bx = tip.x + d.x*ARW, by = tip.y + d.y*ARW;
+      ctx.beginPath(); ctx.moveTo(tip.x, tip.y); ctx.lineTo(bx + pe.x*ARW*0.3, by + pe.y*ARW*0.3); ctx.lineTo(bx - pe.x*ARW*0.3, by - pe.y*ARW*0.3); ctx.closePath(); ctx.fill();
+      ctx.save();
+      ctx.translate(C.x, C.y);
+      ctx.lineWidth = 3/V.z; ctx.strokeStyle = paperFill; ctx.strokeText(txt, 0, 0);
+      ctx.fillStyle = '#1f6fd1'; ctx.fillText(txt, 0, 0);
+      ctx.restore();
+      placed.push([C.x - tw/2, C.y - tH/2, C.x + tw/2, C.y + tH/2]);
+    });
+    ctx.restore();
+  }
+
+  if (ui && anchor && anchor.seg) {
+    ctx.save(); ctx.strokeStyle = ACC; ctx.lineWidth = 4 / V.z;
+    ctx.beginPath(); ctx.moveTo(anchor.seg[0], anchor.seg[1]); ctx.lineTo(anchor.seg[2], anchor.seg[3]); ctx.stroke();
+    ctx.restore();
+  }
+  if (ui && anchor) {
+    ctx.fillStyle = ACC;
+    ctx.beginPath(); ctx.arc(anchor.x, anchor.y, 5/V.z, 0, Math.PI*2); ctx.fill();
+
+    ctx.fillStyle = '#1c2530';
+  }
+
+}
+
+let histPast = [], histFuture = [], histLast = null, histApplying = false;
+function render() {
+  { const cur = JSON.stringify({items, freeMarks, arcs, tris}); if (histLast !== null && cur !== histLast && !histApplying) { histPast.push(histLast); if (histPast.length > 200) histPast.shift(); histFuture = []; } histLast = cur; } paint(dpr, null, true, true); list(); try { localStorage.setItem('isoPipeAutosave', JSON.stringify({items, freeMarks, arcs, tris})); } catch (e) {} }
+
+function list() {
+  const total = items.reduce((s, it) => s + (+it.len), 0);
+  let html = weldMode ? '<div class="anc">Field mark mode: tap a weld dot to replace it with a field mark, tap anywhere to add one, tap a mark again to remove it.</div>' : '';
+  if (anchor) {
+    const it = items[anchor.idx];
+    html += `<div class="anc">Branch point on item ${anchor.idx+1} (${SYMS[it.key].n}) at ${anchor.mm} mm. Choose a symbol and press Add.</div>`;
+  }
+  html += items.length
+    ? items.map((it, i) => `<div>${i+1}. ${SYMS[it.key].n} — ${it.len} mm — ${it.lbl || DN[it.d]}${it.size ? ' — ' + it.size : ''}${it.sch ? ' ' + it.sch : ''}${it.from ? ' (branch of item ' + it.from + ')' : ''}</div>`).join('') +
+      `<div class="tot">Total: ${total} mm</div>`
+    : '<div>No items yet. Choose a symbol, enter length and direction, then press Add. Tap any line of a drawn symbol to start a branch from that point.</div>';
+  $('list').innerHTML = html;
+  $('cb').disabled = !anchor;
+}
+
+// ---- Tap on any drawn line or point to set a branch point ----
+function hit(mx, my, rad = 14, pointsOnly = false) {
+  let best = null;
+  const clamp = t => Math.max(0, Math.min(1, t));
+  for (const s of segs) {
+    if (pointsOnly && !s.pt) continue;
+    if (s.endPt && !pointsOnly) continue;
+    if (s.pt) {
+      const d = Math.hypot(mx - s.x, my - s.y) * V.z;
+      if (d < rad && (!best || d < best.d)) best = {d, i: s.i, x: s.x, y: s.y, seg: null, mm: 0, id: s.wid};
+      continue;
+    }
+    const vx = s.x2 - s.x1, vy = s.y2 - s.y1, l2 = vx*vx + vy*vy;
+    if (!l2) continue;
+    const t = clamp(((mx - s.x1)*vx + (my - s.y1)*vy) / l2);
+    const px = s.x1 + vx*t, py = s.y1 + vy*t;
+    const d = Math.hypot(mx - px, my - py) * V.z;
+    if (d < 12 && (!best || d < best.d)) {
+      best = {d, i: s.i, x: px, y: py, seg: [s.x1, s.y1, s.x2, s.y2], mm: Math.round(t * Math.sqrt(l2) / SCALE)};
+    }
+  }
+  return best;
+}
+
+function askTriHatch(pts) {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);background:#fff;border:2px solid #1c2530;border-radius:12px;padding:18px 20px;z-index:99;font:16px sans-serif;color:#1c2530;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.25)';
+  box.innerHTML = '<div style="margin-bottom:14px">Hatching of the triangle</div>';
+  const mk = (t, dir) => { const b = document.createElement('button'); b.textContent = t; b.style.cssText = 'margin:0 6px;padding:8px 14px;border:1px solid #1c2530;border-radius:8px;font:16px sans-serif;background:#fff;color:#1c2530'; b.onclick = () => { box.remove(); tris.push({p: pts, dir}); render(); }; return b; };
+  box.appendChild(mk('Horizontal', 'h')); box.appendChild(mk('Vertical', 'v'));
+  const c = document.createElement('button'); c.textContent = 'Cancel'; c.style.cssText = 'margin:0 6px;padding:8px 14px;border:1px solid #1c2530;border-radius:8px;font:16px sans-serif;background:#fff;color:#1c2530'; c.onclick = () => box.remove();
+  box.appendChild(c); document.body.appendChild(box);
+}
+function triHatch(t) {
+  const P = t.p, H = t.dir === 'h', out = [];
+  const vals = P.map(q => H ? q.y : q.x); const lo = Math.min(...vals), hi = Math.max(...vals);
+  for (let v = lo + 0.5; v < hi; v += 4) {
+    const xs = [];
+    for (let i = 0; i < 3; i++) {
+      const a = P[i], b = P[(i + 1) % 3]; const va = H ? a.y : a.x, vb = H ? b.y : b.x;
+      if ((va - v) * (vb - v) <= 0 && va !== vb) { const k = (v - va) / (vb - va); xs.push(H ? a.x + k*(b.x - a.x) : a.y + k*(b.y - a.y)); }
+    }
+    if (xs.length >= 2) { const mn = Math.min(...xs), mx = Math.max(...xs); out.push(H ? [[mn, v], [mx, v]] : [[v, mn], [v, mx]]); }
+  }
+  return out;
+}
+function pipeEnds() {
+  const out = [];
+  items.forEach(it => {
+    if (it.key !== 'pipe') return;
+    const [ux, uy] = scrOf(it), l = (+it.len) * SCALE;
+    out.push({x: it.x, y: it.y}, {x: it.x + ux*l, y: it.y + uy*l});
+  });
+  return out;
+}
+function doTap(e) {
+  const r = cv.getBoundingClientRect();
+  const wx = (e.clientX - r.left - V.x) / V.z, wy = (e.clientY - r.top - V.y) / V.z;
+  if (startMode) {
+    freeStart = {x: wx, y: wy}; startMode = false;
+    render();
+    return;
+  }
+  if (triMode) {
+    // the triangle: any three points tapped on the drawing
+    triPts.push({x: wx, y: wy});
+    if (triPts.length === 3) { askTriHatch([...triPts]); triMode = false; triPts = []; }
+    render();
+    return;
+  }
+  if (bendMode) {
+    // Bend: tap the two pipe ends, then give R
+    let best = null, bd = 1e9;
+    for (const q of pipeEnds()) { const d = Math.hypot(q.x - wx, q.y - wy); if (d < bd) { bd = d; best = q; } }
+    if (best && bd * V.z < 30) {
+      bendPts.push({x: best.x, y: best.y});
+      if (bendPts.length === 2) {
+        // the radius is set automatically from the distance between the two ends (no prompt)
+        const d = Math.hypot(bendPts[1].x - bendPts[0].x, bendPts[1].y - bendPts[0].y);
+        // the note after R= is the text typed in the Text field before the two taps; it does not change the arc
+        const lbl = $('lbl').value.trim();
+        if (d > 0) arcs.push({p1: bendPts[0], p2: bendPts[1], r: d / SCALE, lbl: lbl});
+        bendMode = false; bendPts = [];
+        render();
+      }
+    }
+    return;
+  }
+  const h = hit(wx, wy, weldMode ? 12 : 14, weldMode);
+  if (weldMode) {
+    // tap a free field mark again: remove it
+    const fk = freeMarks.findIndex(m => Math.hypot(m.x - wx, m.y - wy) * V.z < 12);
+    if (fk >= 0) { freeMarks.splice(fk, 1); render(); return; }
+    // tap a weld dot: it becomes a field mark (hollow), replacing the black dot; tap again to restore
+    if (h && h.id === 'end') { const it = items[h.i]; it.fe = !it.fe; render(); return; }
+    if (h && h.id !== undefined) {
+      const it = items[h.i]; it.fw = it.fw || [];
+      const k = it.fw.indexOf(h.id);
+      if (k >= 0) it.fw.splice(k, 1); else it.fw.push(h.id);
+      render(); return;
+    }
+    // anywhere else on the drawing: a new field mark at the tapped point
+    freeMarks.push({x: wx, y: wy});
+    render();
+    return;
+  }
+  const h2 = h;
+  anchor = h2 ? {idx: h2.i, x: h2.x, y: h2.y, mm: h2.mm, seg: h2.seg} : null;
+  render();
+}
+
+// ---- Pan and zoom: mouse drag, wheel, touch drag, pinch ----
+const ptrs = new Map();
+let pd = null, pm = null, down = null;
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  down = ptrs.size === 1 ? {x: e.clientX, y: e.clientY} : null;
+  pd = null; pm = null;
+});
+cv.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) return;
+  const prev = ptrs.get(e.pointerId);
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  const r = cv.getBoundingClientRect();
+  if (ptrs.size === 1) {
+    V.x += e.clientX - prev.x;
+    V.y += e.clientY - prev.y;
+  } else if (ptrs.size === 2) {
+    down = null;
+    const [a, b] = [...ptrs.values()];
+    const nd = Math.hypot(a.x - b.x, a.y - b.y);
+    const mid = {x: (a.x + b.x)/2 - r.left, y: (a.y + b.y)/2 - r.top};
+    if (pd) {
+      zoomAt(mid.x, mid.y, nd / pd);
+      V.x += mid.x - pm.x;
+      V.y += mid.y - pm.y;
+    }
+    pd = nd; pm = mid;
+  }
+  render();
+});
+const endPtr = e => {
+  const isTap = down && ptrs.size === 1 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 6;
+  ptrs.delete(e.pointerId);
+  pd = null; pm = null;
+  if (isTap) { down = null; doTap(e); }
+  else if (ptrs.size === 0) down = null;
+};
+cv.addEventListener('pointerup', endPtr);
+cv.addEventListener('pointercancel', () => { ptrs.clear(); down = null; pd = null; pm = null; });
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.1 : 0.9);
+}, {passive: false});
+
+// ---- Export: the whole drawing, not just the visible part, at print resolution ----
+
+class VRec {
+  constructor(W, H) { this.W = W; this.H = H; this.canvas = {width: W, height: H}; this.ops = []; this.stack = []; this.m = [1,0,0,1,0,0]; this.lineWidth = 1; this.strokeStyle = '#000'; this.fillStyle = '#000'; this.font = '10px sans-serif'; this.textAlign = 'left'; this.textBaseline = 'alphabetic'; this.dash = []; this.path = []; }
+  get sf() { return Math.sqrt(Math.abs(this.m[0]*this.m[3] - this.m[1]*this.m[2])) || 1; }
+  tp(x, y) { const m = this.m; return [m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]]; }
+  save() { this.stack.push({m: this.m.slice(), lineWidth: this.lineWidth, strokeStyle: this.strokeStyle, fillStyle: this.fillStyle, font: this.font, textAlign: this.textAlign, textBaseline: this.textBaseline, dash: this.dash.slice()}); }
+  restore() { const t = this.stack.pop(); if (t) Object.assign(this, t); }
+  setTransform(a, b, c, d, e, f) { this.m = [a, b, c, d, e, f]; }
+  translate(x, y) { const m = this.m; this.m = [m[0], m[1], m[2], m[3], m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]]; }
+  scale(x, y) { const m = this.m; this.m = [m[0]*x, m[1]*x, m[2]*y, m[3]*y, m[4], m[5]]; }
+  rotate(a) { const c = Math.cos(a), s = Math.sin(a), m = this.m; this.m = [m[0]*c + m[2]*s, m[1]*c + m[3]*s, -m[0]*s + m[2]*c, -m[1]*s + m[3]*c, m[4], m[5]]; }
+  setLineDash(a) { this.dash = a.slice(); }
+  getLineDash() { return this.dash.slice(); }
+  beginPath() { this.path = []; }
+  moveTo(x, y) { this.path.push(['M', ...this.tp(x, y)]); }
+  lineTo(x, y) { this.path.push(['L', ...this.tp(x, y)]); }
+  closePath() { this.path.push(['Z']); }
+  arc(cx, cy, r, a0, a1, ccw) { let d = a1 - a0; if (ccw) { while (d > 0) d -= 2*Math.PI; } else { while (d < 0) d += 2*Math.PI; } const n = Math.max(12, Math.ceil(Math.abs(d) / (Math.PI/24))); for (let i = 0; i <= n; i++) { const t = a0 + d*i/n; const [x, y] = this.tp(cx + r*Math.cos(t), cy + r*Math.sin(t)); this.path.push([(i === 0 && this.path.length === 0) ? 'M' : 'L', x, y]); } }
+  quadraticCurveTo(cx, cy, x, y) { const last = this.path[this.path.length - 1]; const p0 = [last[1], last[2]]; const c = this.tp(cx, cy), p1 = this.tp(x, y); for (let i = 1; i <= 12; i++) { const t = i/12, u = 1 - t; this.path.push(['L', u*u*p0[0] + 2*u*t*c[0] + t*t*p1[0], u*u*p0[1] + 2*u*t*c[1] + t*t*p1[1]]); } }
+  rect(x, y, w, h) { this.moveTo(x, y); this.lineTo(x + w, y); this.lineTo(x + w, y + h); this.lineTo(x, y + h); this.closePath(); }
+  fillRect(x, y, w, h) { this.beginPath(); this.rect(x, y, w, h); this.fill(); }
+  clearRect() {} clip() {} drawImage() {}
+  stroke() { if (this.path.length) this.ops.push({k: 'S', d: this.path.slice(), w: this.lineWidth*this.sf, c: this.strokeStyle, dash: this.dash.map(v => v*this.sf)}); }
+  fill() { if (this.path.length) this.ops.push({k: 'F', d: this.path.slice(), c: this.fillStyle}); }
+  fillText(t, x, y) { const sz = parseFloat((this.font.match(/([\d.]+)px/) || [0, 10])[1]) * this.sf; const [X, Y] = this.tp(x, y); this.ops.push({k: 'T', s: String(t), x: X, y: Y, size: sz, c: this.fillStyle, align: this.textAlign, base: this.textBaseline, bold: /bold/.test(this.font)}); }
+  measureText(t) { const sz = parseFloat((this.font.match(/([\d.]+)px/) || [0, 10])[1]); return {width: 0.56*sz*String(t).length}; }
+}
+function drawingCanvas() {
+  const xs = [0], ys = [0];
+  items.forEach(it => {
+    const [ux, uy] = scrOf(it), l = it.len * SCALE;
+    xs.push(it.x, it.x + ux*l); ys.push(it.y, it.y + uy*l);
+  });
+  // the triangles, the bend arcs and the field marks are included in the drawing area too
+  tris.forEach(t => t.p.forEach(q => { xs.push(q.x); ys.push(q.y); }));
+  arcs.forEach(a => { const d = Math.hypot(a.p2.x - a.p1.x, a.p2.y - a.p1.y); const mx = (a.p1.x + a.p2.x)/2, my = (a.p1.y + a.p2.y)/2; xs.push(a.p1.x, a.p2.x, mx - d, mx + d); ys.push(a.p1.y, a.p2.y, my - d, my + d); });
+  freeMarks.forEach(m => { xs.push(m.x); ys.push(m.y); });
+  const PAD = 40, M = 60, W = 2400;
+  const minX = Math.min(...xs) - PAD, maxX = Math.max(...xs) + PAD;
+  const minY = Math.min(...ys) - PAD, maxY = Math.max(...ys) + PAD;
+  const s = (W - 2*M) / (maxX - minX);          // pixels per model unit
+  const H = Math.ceil((maxY - minY) * s + 2*M);
+  const K = 2.2;                                 // thicker lines and larger text for print
+  const vec = !!window.__vecMode;
+  const eg = vec ? {width: W, height: H} : document.createElement('canvas');
+  if (!vec) { eg.width = W; eg.height = H; }
+  const savedCtx = ctx, savedV = V;
+  ctx = vec ? new VRec(W, H) : eg.getContext('2d');
+  V = {x: (M - minX*s) / K, y: (M - minY*s) / K, z: s / K};
+  exporting = true; paint(K, '#ffffff', false, false); exporting = false;
+  const ttl = $('ttl').value.trim();
+  if (ttl) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#1c2530'; ctx.font = 'bold 46px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ttl, W / 2, M / 2); }
+  if (vec) eg.vec = ctx;
+  ctx = savedCtx; V = savedV;
+  return eg;
+}
+
+// ---- Bill of Material: identical items (same symbol, joint and length) share one number ----
+const JN = {BW:'Buttweld', SW:'Socketweld', TH:'Threaded', FL:'Flanged'};
+function bomData() {
+  const map = new Map(), rows = [];
+  items.forEach((it, i) => {
+    const joint = it.f === 'f' ? JN[it.j] : '-';
+    const isElbow = /^elbow/.test(it.sh || ''), angle = isElbow && it.deg > 0 ? it.deg : 0;
+    const k = `${it.key}|${joint}|${it.len}|${it.flip ? 1 : 0}|${it.face || ''}|${it.lbl || ''}|${it.size || ''}|${it.sch || ''}|${angle}`;
+    if (!map.has(k)) {
+      const r = {no: rows.length + 1, name: angle ? `Elbow ${angle}°` : SYMS[it.key].n, joint, size: it.size || '-', sch: it.sch || '-', len: +it.len, pipe: it.key === 'pipe', dim: it.lbl || '-', qty: 0, idx: []};
+      map.set(k, r); rows.push(r);
+    }
+    const r = map.get(k); r.qty++; r.idx.push(i + 1);
+  });
+  return rows;
+}
+function openBom() {
+  const rows = bomData();
+  $('bomBody').innerHTML = rows.length
+    ? rows.map(r => `<tr><td>${r.no}</td><td>${r.name}</td><td>${r.joint}</td><td>${r.size}</td><td>${r.sch}</td><td>${r.dim}</td><td>${r.qty}</td><td>${r.idx.join(', ')}</td></tr>`).join('')
+    : '<tr><td colspan="8">No items yet</td></tr>';
+  const count = rows.reduce((s, r) => s + r.qty, 0);
+  $('bomTot').textContent = `Total items: ${count}`;
+  $('bomImg').src = sheetCanvas().toDataURL('image/png');
+  $('bom').hidden = false;
+}
+function sheetCanvas() {
+  // One outer frame: the drawing on the left, the Bill of Material on the right, both inside it
+  const dc = drawingCanvas();
+  const rows = bomData();
+  const M = 60, GAP = 24, FS = 28, rowH = 52, TITLE = 70;
+  const TW = dc.width;   // the table has the same width as the drawing, and sits below it
+  const base = [['No.', 60], ['Description', 280], ['Joint', 150], ['Size', 110], ['Sch/Class', 140], ['Qty', 70], ['Dimension', 150], ['Items', 180]];
+  const sum = base.reduce((t, c) => t + c[1], 0), f = TW / sum;
+  const cols = base.map(c => [c[0], c[1] * f]);
+  const all = [cols.map(c => c[0]), ...rows.map(r => [r.no, r.name, r.joint, r.size || '-', r.sch || '-', r.qty, r.dim, r.idx.join(', ')])];
+  const pipeTotal = rows.reduce((t, r) => t + (r.pipe ? r.len * r.qty : 0), 0);
+  const count = rows.reduce((t, r) => t + r.qty, 0);
+  const tableTop = M + dc.height + GAP + TITLE;
+  const tableBottom = tableTop + all.length * rowH;
+  const contentH = Math.max(dc.height, tableBottom - M + 80 - M + 40);
+  const W = M + Math.max(dc.width, TW) + M;
+  const H = tableBottom + 70 + M;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  // drawing on the left
+  g.drawImage(dc, M, M, dc.width, dc.height);
+  // outer frame around everything
+  // orientation indicator (small), under the drawing title
+  const cx0 = M + 46, cy0 = M + 46, R0 = 34;
+  g.strokeStyle = '#1c2530'; g.fillStyle = '#1c2530'; g.lineWidth = 2; g.font = 'bold 16px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  [['N', 0.866, -0.5]].forEach(([t, ux, uy]) => {
+    g.beginPath(); g.moveTo(cx0, cy0); g.lineTo(cx0 + ux*R0, cy0 + uy*R0); g.stroke();
+    g.fillText(t, cx0 + ux*(R0 + 14), cy0 + uy*(R0 + 14));
+  });
+  // table on the right, inside the frame
+  const TX = M;
+  g.fillStyle = '#1c2530'; g.textBaseline = 'middle'; g.textAlign = 'left';
+  g.font = `bold ${FS + 4}px sans-serif`;
+  g.fillText('Bill of Material', TX, tableTop - TITLE / 2);
+  g.fillStyle = '#eee'; g.fillRect(TX, tableTop, TW, rowH);
+  all.forEach((vals, ri) => {
+    const y = tableTop + ri * rowH;
+    g.font = (ri ? '' : 'bold ') + FS + 'px sans-serif';
+    g.fillStyle = '#1c2530';
+    let x = TX;
+    vals.forEach((v, j) => { g.fillText(String(v), x + 6, y + rowH/2); x += cols[j][1]; });
+  });
+  g.strokeStyle = '#1c2530'; g.lineWidth = 2.5;
+  for (let ri = 0; ri <= all.length; ri++) { const y = tableTop + ri * rowH; g.beginPath(); g.moveTo(TX, y); g.lineTo(TX + TW, y); g.stroke(); }
+  let x = TX; g.beginPath();
+  cols.forEach(col => { g.moveTo(x, tableTop); g.lineTo(x, tableBottom); x += col[1]; });
+  g.moveTo(TX + TW, tableTop); g.lineTo(TX + TW, tableBottom); g.stroke();
+  g.fillStyle = '#1c2530'; g.font = (FS - 2) + 'px sans-serif';
+  g.fillText(`Total items: ${count}`, TX, tableBottom + 26);
+  return c;
+}
+
+// ---- Saving: download when the browser allows it, and always show a link that opens the file ----
+function download(blob, name) {
+  // A data: link works where blob: links are blocked (in-app web viewers), and can be long-pressed to save
+  const r = new FileReader();
+  r.onload = () => {
+    const u = r.result;
+    const l = $('bomOpen');
+    l.href = u; l.download = name; l.textContent = 'Open / save ' + name; l.hidden = false;
+    const a = document.createElement('a');
+    a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  };
+  r.readAsDataURL(blob);
+}
+function saveBomImage() {
+  sheetCanvas().toBlob(b => download(b, 'isometric_piping_BOM.png'), 'image/png');
+}
+function bytesOf(dataUrl) {
+  const bin = atob(dataUrl.split(',')[1]), out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+// Builds a one-page PDF that embeds the sheet as a JPEG
+function makePdf(cv) {
+  const jpg = bytesOf(cv.toDataURL('image/jpeg', 0.92));
+  const W = cv.width, H = cv.height, pw = 842, ph = Math.round(842 * H / W);
+  const enc = new TextEncoder(), parts = [], offs = [];
+  let len = 0;
+  const push = d => { const b = typeof d === 'string' ? enc.encode(d) : d; parts.push(b); len += b.length; };
+  const obj = (n, body) => { offs[n] = len; push(`${n} 0 obj\n${body}\nendobj\n`); };
+  const content = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+  push('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>`);
+  obj(4, `<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  offs[5] = len;
+  push(`5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`);
+  push(jpg);
+  push('\nendstream\nendobj\n');
+  const xref = len;
+  let x = 'xref\n0 6\n0000000000 65535 f \n';
+  for (let i = 1; i <= 5; i++) x += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
+  x += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  push(x);
+  return new Blob(parts, {type: 'application/pdf'});
+}
+
+function vecColour(c) {
+  c = String(c || '#000').trim();
+  if (c === 'white') return '1 1 1';
+  const m = c.match(/^#([0-9a-f]{6})$/i);
+  if (m) { const v = parseInt(m[1], 16); return [(v >> 16)/255, ((v >> 8) & 255)/255, (v & 255)/255].map(x => x.toFixed(3)).join(' '); }
+  const r = c.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/); if (r) return [r[1], r[2], r[3]].map(x => (x/255).toFixed(3)).join(' ');
+  return '0 0 0';
+}
+function vecPdf(ops, PW, PH) {
+  const pdfY = y => PH - y;
+  const esc = t => String(t).replace(/[^\x20-\x7e]/g, '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  let c = '';
+  for (const o of ops) {
+    const off = o.abs ? 0 : o.M;
+    if (o.k === 'S' || o.k === 'F') {
+      let d = '';
+      for (const p of o.d) {
+        if (p[0] === 'M') d += `${(p[1]+off).toFixed(2)} ${pdfY(p[2]+off).toFixed(2)} m `;
+        else if (p[0] === 'L') d += `${(p[1]+off).toFixed(2)} ${pdfY(p[2]+off).toFixed(2)} l `;
+        else d += 'h ';
+      }
+      if (o.k === 'S') c += `${vecColour(o.c)} RG ${Math.max(0.05, o.w).toFixed(3)} w [${(o.dash || []).map(v => v.toFixed(2)).join(' ')}] 0 d ${d}S\n`;
+      else c += `${vecColour(o.c)} rg ${d}f\n`;
+    } else if (o.k === 'T') {
+      let x = o.x + off, y = o.y + off + (o.base === 'middle' ? 0.35*o.size : 0);
+      const w = 0.56*o.size*o.s.length; if (o.align === 'center') x -= w/2; else if (o.align === 'right') x -= w;
+      c += `BT /${o.bold ? 'F2' : 'F1'} ${o.size.toFixed(2)} Tf ${vecColour(o.c)} rg 1 0 0 1 ${x.toFixed(2)} ${pdfY(y).toFixed(2)} Tm (${esc(o.s)}) Tj ET\n`;
+    }
+  }
+  const enc = new TextEncoder(), parts = [], offs = {}; let len = 0;
+  const push = d => { const b = typeof d === 'string' ? enc.encode(d) : d; parts.push(b); len += b.length; };
+  const obj = (n, body) => { offs[n] = len; push(`${n} 0 obj\n${body}\nendobj\n`); };
+  push('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>`);
+  obj(4, `<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
+  obj(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+  obj(6, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+  const xref = len;
+  let x = 'xref\n0 7\n0000000000 65535 f \n';
+  for (let i = 1; i <= 6; i++) x += String(offs[i]).padStart(10, '0') + ' 00000 n \n';
+  x += `trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  push(x);
+  return new Blob(parts, {type: 'application/pdf'});
+}
+function savePdfVector() {
+  window.__vecMode = true; const eg = drawingCanvas(); window.__vecMode = false;
+  const M = 60, GAP = 24, TITLE = 70, FS = 28, rowH = 52;
+  const TW = eg.width, dh = eg.height;
+  const rows = bomData();
+  const base = [['No.', 60], ['Description', 280], ['Joint', 150], ['Size', 110], ['Sch/Class', 140], ['Qty', 70], ['Dimension', 150], ['Items', 180]];
+  const sum = base.reduce((t, c) => t + c[1], 0), f = TW / sum;
+  const cols = base.map(c => [c[0], c[1] * f]);
+  const all = [cols.map(c => c[0]), ...rows.map(r => [r.no, r.name, r.joint, r.size || '-', r.sch || '-', r.qty, r.dim, r.idx.join(', ')])];
+  const count = rows.reduce((t, r) => t + r.qty, 0);
+  const tableTop = M + dh + GAP + TITLE;
+  const tableBottom = tableTop + all.length * rowH;
+  const PW = TW + 2*M, PH = tableBottom + 70 + M;
+  const ops = [];
+  // the drawing: vector, at the margin
+  eg.vec.ops.forEach(o => ops.push(Object.assign({}, o, {M})));
+  // the compass
+  const cx0 = M + 46, cy0 = M + 46, R0 = 34;
+  [['N', 0.866, -0.5]].forEach(([t, ux, uy]) => {
+    ops.push({k: 'S', abs: true, d: [['M', cx0, cy0], ['L', cx0 + ux*R0, cy0 + uy*R0]], w: 2, c: '#1c2530', dash: []});
+    ops.push({k: 'T', abs: true, s: t, x: cx0 + ux*(R0 + 14), y: cy0 + uy*(R0 + 14), size: 16, c: '#1c2530', align: 'center', base: 'middle'});
+  });
+  // the BOM table: title, header band, text, grid lines
+  ops.push({k: 'T', abs: true, s: 'Bill of Material', x: M, y: tableTop - TITLE/2, size: FS + 4, c: '#1c2530', align: 'left', base: 'middle'});
+  ops.push({k: 'F', abs: true, d: [['M', M, tableTop], ['L', M + TW, tableTop], ['L', M + TW, tableTop + rowH], ['L', M, tableTop + rowH], ['Z']], c: '#eeeeee'});
+  all.forEach((vals, ri) => {
+    const y = tableTop + ri*rowH + rowH/2;
+    let x = M;
+    vals.forEach((v, j) => { ops.push({k: 'T', abs: true, s: String(v), x: x + 6, y, size: FS, c: '#1c2530', align: 'left', base: 'middle'}); x += cols[j][1]; });
+  });
+  for (let ri = 0; ri <= all.length; ri++) { const y = tableTop + ri*rowH; ops.push({k: 'S', abs: true, d: [['M', M, y], ['L', M + TW, y]], w: 2.5, c: '#1c2530', dash: []}); }
+  let x = M;
+  cols.forEach(col => { ops.push({k: 'S', abs: true, d: [['M', x, tableTop], ['L', x, tableBottom]], w: 2.5, c: '#1c2530', dash: []}); x += col[1]; });
+  ops.push({k: 'S', abs: true, d: [['M', M + TW, tableTop], ['L', M + TW, tableBottom]], w: 2.5, c: '#1c2530', dash: []});
+  ops.push({k: 'T', abs: true, s: `Total items: ${count}`, x: M, y: tableBottom + 26, size: FS - 2, c: '#1c2530', align: 'left', base: 'alphabetic'});
+  const name = ($('ttl').value.trim() || 'isometric_piping') + '.pdf';
+  download(vecPdf(ops, PW, PH), name);
+}
+function savePdf() {
+  download(makePdf(sheetCanvas()), 'isometric_piping_BOM.pdf');
+}
+
+// ---- Toolbar ----
+function cancelBranch() { anchor = null; render(); }
+$('startb').onclick = () => { startMode = true; };
+$('triB').onclick = () => { triMode = true; triPts = []; render(); };
+$('add').onclick = () => {
+  if ($('sym').value === 'BEND') { bendMode = true; bendPts = []; render(); return; }
+  const k = $('sym').value, s = SYMS[k];
+  const [sx, sy] = anchor ? [anchor.x, anchor.y] : freeStart ? [freeStart.x, freeStart.y] : chainEnd();
+  let deg = +$('ang').value || 0; const side = $('side').value;
+  if (!deg && SYMS[$('sym').value].sh === 'elbow45') deg = 45;
+  const src = anchor ? items[anchor.idx] : items[items.length - 1];
+  let bent = deg > 0 && src ? bendVec(src, deg, side) : null;
+  // the piece after a bent piece (45 degree elbow) follows its angle automatically
+  if (!bent && src && src.c && !src.pairB && !anchor && s.sh !== 'elbow90' && s.sh !== 'elbow45') bent = vecOf(src).slice();
+  // a valve or fitting placed in the run (no angle, no branch) continues the direction of the piece before it
+  const kindNow = SYMS[$('sym').value];
+  // the chosen Direction is always used (no override by the previous piece)
+  const sideName = {U:'Up', D:'Down', L:'Left', R:'Right'}[side];
+  // a tee's base follows the incoming pipe, so its branch must be perpendicular to that pipe
+  if ((k === 'teq' || k === 'ter') && src && !anchor) {
+    const inc = vecOf(src), li = Math.hypot(inc[0], inc[1], inc[2]) || 1;
+    const across = v => Math.abs((BASE[v][0]*inc[0] + BASE[v][1]*inc[1] + BASE[v][2]*inc[2]) / li);
+    if (across($('dir').value) > 0.5) {
+      const pick = ['U','E','N','W','S','D'].find(c => across(c) < 0.1);
+      if (pick) $('dir').value = pick;
+    }
+  }
+  items.push({key: k, sh: s.sh, f: s.f, j: $('jt').value,
+    len: Math.max(0, +$('len').value || 0), d: bent ? src.d : $('dir').value,
+    c: bent, lbl: deg > 0 ? `${deg}° ${sideName}` : null,
+    size: $('size').value.trim(), sch: $('sch').value.trim(),
+    x: sx, y: sy, from: anchor ? anchor.idx + 1 : 0, lin: !anchor && !freeStart, flip: false, face: $('face').value || null, bs: (deg > 0 && src) ? bendSide(src, side) : null, pd: src ? vecOf(src).slice() : null, lbl: $('lbl').value.trim(), deg: deg}); freeStart = null;
+  if (flipNext) applyMirror(items[items.length - 1], src ? (src.mref || vecOf(src)) : null);
+  // a fitting placed right after another fitting starts a small gap beyond it, so the two never overlap
+  { const nw = items[items.length - 1], pv = items[items.length - 2];
+    if (pv && nw.key !== 'pipe' && pv.key !== 'pipe' && nw.lin) {
+      const [ux, uy] = scrOf(pv), g = 200 * SCALE;
+      nw.x = pv.x + ux * (pv.len * SCALE + g); nw.y = pv.y + uy * (pv.len * SCALE + g);
+      nw.lin = false;
+    } }
+  anchor = null;
+  render();
+};
+$('cb').onclick = cancelBranch;
+$('bomb').onclick = openBom;
+$('fwb').onclick = () => { weldMode = !weldMode; $('fwb').textContent = 'Field mark: ' + (weldMode ? 'On' : 'Off'); };
+let flipNext = false;
+$('flipb').onclick = () => {
+  flipNext = !flipNext;
+  $('flipb').textContent = 'Mirror next: ' + (flipNext ? 'On' : 'Off');
+};
+$('face').onchange = () => {
+  if (!items.length) return;
+  items[items.length - 1].face = $('face').value || null;
+  render();
+};
+$('flipl').onclick = () => {
+     if (!items.length) return;
+     const last = items[items.length - 1];
+     const [ux, uy] = scrOf(last), l = last.len * SCALE;
+     last.x = last.x + ux*l; last.y = last.y + uy*l;          // its start becomes its end
+     if (last.c) last.c = last.c.map(v => -v);                  // and its direction is reversed
+     else last.d = REVERSE[last.d] || last.d;
+     render();
+   };
+// Zoom and move so every drawn line, point and the origin are visible
+function fitAll() {
+  const pts = [[0, 0]];
+  segs.forEach(s => s.pt ? pts.push([s.x, s.y]) : pts.push([s.x1, s.y1], [s.x2, s.y2]));
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const a = $('area'), w = a.clientWidth, h = a.clientHeight;
+  const bw = Math.max(maxX - minX, 1), bh = Math.max(maxY - minY, 1);
+  V.z = Math.min(8, Math.max(0.2, Math.min(w / (bw + 80), h / (bh + 80))));
+  V.x = w / 2 - (minX + maxX) / 2 * V.z;
+  V.y = h / 2 - (minY + maxY) / 2 * V.z;
+  render();
+}
+$('fitb').onclick = fitAll;
+$('bomClose').onclick = () => { $('bom').hidden = true; };
+$('bomPrint').onclick = () => window.print();
+$('bomSave').onclick = saveBomImage;
+$('bomPdf').onclick = savePdf;
+$('undo').onclick = () => { items.pop(); anchor = null; render(); };
+function histApply(from, to) { const cur = JSON.stringify({items, freeMarks, arcs, tris}); const st = JSON.parse(from.pop()); to.push(cur); histApplying = true; items = st.items; freeMarks = st.freeMarks || []; arcs = st.arcs || []; anchor = null; histApplying = false; histLast = JSON.stringify(st); render(); }
+$('histBack').onclick = () => { if (histPast.length) histApply(histPast, histFuture); };
+$('histFwd').onclick = () => { if (histFuture.length) histApply(histFuture, histPast); };
+$('clr').onclick = () => {
+  // a confirmation panel inside the page (the browser's own box does not show on the phone)
+  if (document.getElementById('clrAsk')) return;
+  const box = document.createElement('div'); box.id = 'clrAsk';
+  box.style.cssText = 'position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);background:#fff;border:2px solid #1c2530;border-radius:12px;padding:18px 20px;z-index:99;font:16px sans-serif;color:#1c2530;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.25);max-width:90%';
+  box.innerHTML = '<div style="margin-bottom:14px">Clear the whole drawing?</div>';
+  const mk = (t, bg, fg) => { const b = document.createElement('button'); b.textContent = t; b.style.cssText = 'margin:0 8px;padding:8px 18px;border:1px solid #1c2530;border-radius:8px;font:16px sans-serif;background:' + bg + ';color:' + fg; return b; };
+  const yes = mk('Yes, clear', '#1c2530', '#fff'), no = mk('No', '#fff', '#1c2530');
+  yes.onclick = () => { box.remove(); items = []; freeMarks = []; arcs = []; tris = []; anchor = null; freeStart = null; bendMode = false; bendPts = []; triMode = false; triPts = []; render(); };
+  no.onclick = () => box.remove();
+  box.appendChild(yes); box.appendChild(no); document.body.appendChild(box);
+};
+$('zin').onclick = () => zoomAt(V.x, V.y, 1.2);
+$('zout').onclick = () => zoomAt(V.x, V.y, 1/1.2);
+$('center').onclick = () => { resetView(); render(); };
+$('png').onclick = () => {
+  const a = document.createElement('a');
+  a.download = fname() + '.png';
+  a.href = drawingCanvas().toDataURL('image/png');
+  a.click();
+};
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { cancelBranch(); $('bom').hidden = true; } });
+window.addEventListener('resize', () => {
+  cv.width = $('area').clientWidth * dpr; cv.height = $('area').clientHeight * dpr;
+  render();
+});
+const fname = () => ($('ttl').value.trim() || 'isometric_piping').replace(/[\\\/:*?"<>|]+/g, '-').slice(0, 80);
+$('pdfd').onclick = () => { if (!items.length) return; savePdfVector(); return; download(makePdf(drawingCanvas()), fname() + '.pdf'); };
+$('prn').onclick = () => {
+  if (!items.length) return;
+  const area = $('prnArea'), img = new Image();
+  img.onload = () => {
+    area.textContent = ''; area.appendChild(img);
+    const oldTitle = document.title; document.title = fname();
+    const done = () => { area.textContent = ''; document.title = oldTitle; window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    setTimeout(() => { try { window.print(); } catch (e) { done(); } }, 150);
+  };
+  img.src = drawingCanvas().toDataURL('image/png');
+};
+fit();
+
+// ---- Facing flange: a second flange of the same kind, turned to face the first, with a gap between them ----
+const FLANGE_KEYS = ['fwn','fsw','fth','fso','flj','fbl'];
+function syncFlangeLength() {
+  // flanges and 45 degree elbows have no length of their own: they join the pipes at a point
+  const isFlange = $('sym').value !== 'pipe';   // only the pipe has a length: every fitting, valve and flange joins the pipes at a point
+  const len = $('len'), lab = len.previousElementSibling;
+  len.style.display = isFlange ? 'none' : '';
+  if (lab && /Length/i.test(lab.textContent)) lab.style.display = isFlange ? 'none' : '';
+  if (isFlange) len.value = '0';
+}
+$('advb').addEventListener('click', () => { document.querySelectorAll('.adv').forEach(el => el.style.display = el.style.display === 'none' ? '' : 'none'); });
+$('sym').addEventListener('change', syncFlangeLength);
+const REVERSE = {N:'S', S:'N', E:'W', W:'E', U:'D', D:'U'};
+$('pairb').onclick = () => {
+  const n = items.length;
+  if (!n) { toast('Add a flange first'); return; }
+  const last = items[n - 1];
+  if (FLANGE_KEYS.indexOf(last.key) < 0) { toast('Select a flange as the last piece'); return; }
+  const gap = 25;    // mm: a small gap between two facing flanges, in proportion to the symbols
+  const saved = {sym: $('sym').value, dir: $('dir').value, len: $('len').value, joint: $('jt').value, flip: flipNext};
+  $('sym').value = last.key; $('dir').value = REVERSE[last.d] || last.d; $('len').value = '0'; $('jt').value = last.j; flipNext = false;
+  const savedLbl = $('lbl').value; $('lbl').value = '';
+  $('add').click();
+  $('lbl').value = savedLbl;
+  $('sym').value = saved.sym; $('dir').value = saved.dir; $('len').value = saved.len; $('jt').value = saved.joint; flipNext = saved.flip;
+  const it = items[items.length - 1];
+  if (it && it !== last) {
+    const [ux, uy] = scrOf(last);                       // along the flow of the first flange
+    it.x = last.x + ux * gap * SCALE; it.y = last.y + uy * gap * SCALE;   // after the first, with the empty gap between
+    it.lin = false;
+    it.pairB = true;   // the second flange of a facing pair: its neck is on the outgoing side
+    // the second flange faces back along the exact direction of the first, including a bent (45 degree) direction
+    if (last.c) it.c = [-last.c[0], -last.c[1], -last.c[2]];
+  }
+  render();
+};
+});
+
+</script>
+<div id="bom" hidden>
+  <div class="sheet">
+    <div class="bar">
+      <button id="bomPrint">Print</button>
+      <button id="bomSave">Save image</button>
+      <button id="bomPdf">Save PDF</button>
+      <button id="bomClose">Close</button>
+    </div>
+    <img id="bomImg" alt="Drawing">
+    <h3>Bill of Material</h3>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>No.</th><th>Description</th><th>Joint</th><th>Size</th><th>Sch/Class</th><th>Dimension</th><th>Qty</th><th>Items in drawing</th></tr></thead>
+      <tbody id="bomBody"></tbody>
+    </table></div>
+    <p id="bomTot"></p>
+    <p style="font-size:14px;color:#555">To save without a download: press and hold the picture above, then choose Save image.</p>
+    <p><a id="bomOpen" target="_blank" rel="noopener" hidden></a></p>
+  </div>
+</div>
+</body>
+</html>
